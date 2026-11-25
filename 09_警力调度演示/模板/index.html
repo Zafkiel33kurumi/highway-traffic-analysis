@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交警警力调度指挥台 · 演示版</title>
+<style>
+  :root{
+    --bg:#0a1020; --panel:#111b2e; --panel2:#16233a; --line:#22314b;
+    --ink:#e8eefc; --muted:#8ba0c0; --dim:#5f7291;
+    --ok:#22c55e; --slow:#eab308; --warn:#f97316; --bad:#ef4444; --brand:#38bdf8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+       font-size:13px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1500px;margin:0 auto;padding:16px 18px 40px}
+
+  header{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .brand{font-size:18px;font-weight:700;letter-spacing:.04em}
+  .brand small{display:block;font-size:11px;color:var(--dim);font-weight:400;letter-spacing:.08em;margin-top:3px}
+  .clockbox{display:flex;align-items:baseline;gap:10px;margin-left:6px}
+  .clock{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--brand)}
+  .meta{color:var(--muted);font-size:12px;line-height:1.7}
+  .controls{margin-left:auto;display:flex;gap:8px}
+  button{font-family:inherit;font-size:12px;font-weight:600;color:var(--ink);background:var(--panel2);
+         border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;transition:.15s}
+  button:hover{border-color:#3b5170;background:#1b2b45}
+  button.primary{background:#0e7490;border-color:#0e7490}
+  button.primary:hover{background:#0891b2;border-color:#0891b2}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:14px 0}
+  @media(max-width:1000px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .kpi .k{font-size:11px;color:var(--muted);letter-spacing:.03em}
+  .kpi .v{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+  .kpi .v em{font-size:11px;font-style:normal;color:var(--dim);font-weight:500;margin-left:4px}
+  .kpi .s{font-size:11px;color:var(--dim);margin-top:2px}
+  .v.bad{color:var(--bad)} .v.warn{color:var(--warn)} .v.ok{color:var(--ok)} .v.brand{color:var(--brand)}
+
+  .main{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start}
+  @media(max-width:1150px){.main{grid-template-columns:1fr}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .panel-h h2{font-size:13px;font-weight:700}
+  .panel-h .sub{font-size:11px;color:var(--dim)}
+
+  .tabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line)}
+  .tab{font-size:12.5px;font-weight:600;color:var(--muted);padding:9px 14px;border-radius:8px 8px 0 0;cursor:pointer;border:1px solid transparent;border-bottom:0}
+  .tab.on{color:var(--ink);background:var(--panel2);border-color:var(--line)}
+  .tab i{display:inline-block;min-width:16px;text-align:center;font-style:normal;font-size:10px;background:#24344f;color:var(--brand);
+         border-radius:6px;padding:1px 5px;margin-left:6px}
+  .tab-body{padding:14px 16px 18px}
+
+  /* 二维路网图 */
+  .mapWrap{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0b1526;margin-bottom:4px}
+  .mapSvg{display:block;width:100%;aspect-ratio:1400/620;cursor:grab;touch-action:none;user-select:none}
+  .mapSvg.dragging{cursor:grabbing}
+  .mapLegend{position:absolute;left:10px;top:10px;background:rgba(8,14,28,.9);border:1px solid #24344f;border-radius:9px;
+             padding:6px 10px;font-size:10.5px;line-height:1.5;color:#c3d2e8;pointer-events:auto;
+             max-width:calc(100% - 250px);max-height:30px;overflow:hidden;
+             transition:max-height .22s ease,background .22s,box-shadow .22s;z-index:3}
+  .mapLegend:hover{max-height:300px;background:rgba(8,14,28,.97);box-shadow:0 12px 28px rgba(0,0,0,.55)}
+  .mapLegend .lgHead{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;
+                     letter-spacing:.1em;color:#c3d2e8;white-space:nowrap}
+  .mapLegend .lgHead em{font-style:normal;font-size:9.5px;font-weight:400;letter-spacing:0;color:#5f7291}
+  .mapLegend:hover .lgHead em{color:#8ba0c0}
+  .mapLegend .lgBody{margin-top:5px;padding-top:5px;border-top:1px dashed #24344f}
+  .mapLegend .lg{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0}
+  .mapLegend b{font-size:9.5px;color:var(--dim);letter-spacing:.08em;font-weight:600;min-width:24px}
+  .mapLegend span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+  .mapLegend i{width:14px;height:4px;border-radius:2px;display:inline-block;flex:none}
+  .mapLegend i.dot{width:8px;height:8px;border-radius:50%}
+  .mapTools{position:absolute;right:10px;top:10px;display:flex;gap:6px}
+  .mapTools button{padding:5px 10px;font-size:12px;background:rgba(17,27,46,.9)}
+  .mapHint{position:absolute;right:11px;bottom:8px;font-size:10.5px;color:#6b7f9e;pointer-events:none}
+  .focusClock{display:none}
+  .mapDetail{position:absolute;left:10px;bottom:10px;width:250px;background:rgba(10,18,33,.95);border:1px solid #2b3f60;
+             border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+  .mapDetail .h{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+  .mapDetail .h b{font-size:14px}
+  .mapDetail .h .x{margin-left:auto;cursor:pointer;color:#7b8fb0;font-size:16px;line-height:1;padding:0 2px}
+  .mapDetail .g{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px;font-size:11px;color:#9fb2cf}
+  .mapDetail .g b{color:#e8eefc;font-variant-numeric:tabular-nums;font-weight:600}
+  .mapDetail .unit{font-size:9.5px;color:#7b8fb0}
+  .mapGroup{position:absolute;right:10px;bottom:28px;width:270px;background:rgba(10,18,33,.96);border:1px solid #2b3f60;
+            border-radius:9px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+  .mapGroup .h{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .mapGroup .h b{font-size:13.5px}
+  .mapGroup .h .x{margin-left:auto;cursor:pointer;color:#7b8fb0;font-size:16px;line-height:1;padding:0 2px}
+  .mapGroup .gdot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+  .mapGroup .gcName{font-size:10.5px;color:#8ba0c0;margin-bottom:6px}
+  .mapGroup .gcRow{font-size:11.5px;color:#9fb2cf;line-height:1.62}
+  .mapGroup .gcRow b{color:#e8eefc}
+  .mapGroup .gcHint{margin-top:8px;font-size:11px;color:#fbbf24;line-height:1.5}
+  .mapGroup .gcBtns{display:flex;gap:7px;margin-top:9px}
+  .mapGroup .gcBtns button{flex:1;padding:6px 8px;font-size:11.5px}
+  .mapSvg.assigning{cursor:crosshair}
+  .fcBar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:10px 0 4px;padding:9px 12px;
+         background:#0f1b2f;border:1px solid #22314b;border-radius:9px;font-size:11.5px;color:#9fb2cf}
+  .fcBar b{color:#e8eefc;font-size:12px}
+  .fcBar .fx{font-size:10.5px;color:#5f7291}
+  .fcBar .pt{display:inline-flex;align-items:center;gap:4px;background:#16233a;border-radius:6px;padding:3px 7px}
+  .fcBar .pv{color:#fb923c;font-weight:700;font-variant-numeric:tabular-nums}
+  .teamRoute{stroke-dasharray:7 6;animation:dashmove 1s linear infinite}
+  @keyframes dashmove{to{stroke-dashoffset:-13}}
+
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;font-weight:600;color:var(--dim);font-size:11px;padding:7px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid #1a2740;font-variant-numeric:tabular-nums}
+  tr:hover td{background:#152136}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px}
+  .tag.ok{color:#86efac;background:#14532d} .tag.slow{color:#fde68a;background:#422f08}
+  .tag.warn{color:#fdba74;background:#431407} .tag.bad{color:#fca5a5;background:#450a0a}
+  .tag.gray{color:#cbd5e1;background:#1e293b}
+  .bar{height:6px;background:#1e2c45;border-radius:3px;overflow:hidden;min-width:60px}
+  .bar i{display:block;height:100%;background:var(--brand);border-radius:3px}
+  .muted{color:var(--dim)}
+
+  /* 任务 */
+  .taskGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  @media(max-width:760px){.taskGrid{grid-template-columns:1fr}}
+  .task{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+  .task .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .task .id{font-size:11px;color:var(--dim);font-family:ui-monospace,Menlo,monospace}
+  .task .who{font-size:12.5px;font-weight:700}
+  .task .where{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .task .foot{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px;color:var(--muted)}
+
+  /* 设备 */
+  .devGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:5px;margin:10px 0 4px}
+  .dev{height:34px;border-radius:5px;background:#16233a;display:flex;align-items:center;justify-content:center;
+       font-size:9.5px;color:#64748b;border:1px solid transparent}
+  .dev.fault{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}
+  .dev.warn2{background:#422f08;color:#fde68a}
+  .dev.off{opacity:.28}
+  .alarmList{max-height:340px;overflow:auto}
+
+  /* 事件流 */
+  .feed{max-height:640px;overflow:auto;padding:6px 0}
+  .ev{display:grid;grid-template-columns:40px 1fr;gap:8px;padding:7px 14px;border-bottom:1px solid #17233a}
+  .ev .t{font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .ev .x{font-size:11.5px;line-height:1.5;color:#c3d2e8}
+  .ev.alarm .x{color:#fca5a5} .ev.dispatch .x{color:#7dd3fc} .ev.done .x{color:#86efac}
+  .ev.cancel .x{color:#fcd34d} .ev.arrive .x{color:#c4b5fd}
+
+  .note{font-size:11px;color:var(--dim);line-height:1.7;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+
+  /* 调度设置 */
+  .modalMask{position:fixed;inset:0;background:rgba(4,9,18,.74);display:none;align-items:center;justify-content:center;z-index:50}
+  .modalMask.on{display:flex}
+  .modal{width:min(560px,92vw);background:#101b2e;border:1px solid #2b3f60;border-radius:14px;padding:20px 22px;
+         box-shadow:0 22px 60px rgba(0,0,0,.6)}
+  .modal h3{font-size:16px;margin-bottom:4px}
+  .modal .sub{font-size:11.5px;color:var(--dim);line-height:1.65}
+  .field{margin-top:14px;padding-top:12px;border-top:1px solid #1c2a42}
+  .field > label{font-size:12px;color:var(--muted);font-weight:600}
+  .checks{display:flex;flex-direction:column;gap:9px;margin-top:9px}
+  .checks label{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink);cursor:pointer}
+  .checks input{accent-color:#0891b2;width:15px;height:15px}
+  .checks em{font-style:normal;color:var(--dim);font-size:11px}
+  .numRow{display:flex;align-items:center;gap:9px;margin-top:9px;font-size:12px;color:var(--muted)}
+  .numRow input{width:96px;background:#0b1526;border:1px solid #2b3f60;border-radius:8px;color:var(--ink);
+                padding:8px 10px;font-size:15px;font-weight:700;font-family:inherit}
+  .numRow .sub{font-size:11px}
+  .presets{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;font-size:11.5px;color:var(--dim)}
+  .presets button{padding:6px 10px;font-size:11.5px}
+  .modalFoot{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+  .modalFoot button{padding:9px 18px}
+  .textInput{width:100%;margin-top:8px;background:#0b1526;border:1px solid #2b3f60;border-radius:8px;color:var(--ink);
+             padding:9px 11px;font-size:13px;font-family:inherit;outline:none}
+  .textInput:focus{border-color:#0e7490}
+
+  /* ---------- 工作台布局 ---------- */
+  .hide{display:none!important}
+  .side{position:fixed;left:0;top:0;bottom:0;width:212px;background:#0c1626;border-right:1px solid var(--line);
+        padding:16px 12px;display:flex;flex-direction:column;z-index:20}
+  .logo{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+  .logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#0e7490,#1d4ed8);
+              display:flex;align-items:center;justify-content:center;flex:none}
+  .logo b{display:block;font-size:13.5px;letter-spacing:.02em}
+  .logo small{display:block;font-size:9.5px;color:var(--dim);letter-spacing:.1em;margin-top:3px}
+  .nav{display:flex;flex-direction:column;gap:3px}
+  .nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;font-size:12.5px;
+         color:var(--muted);cursor:pointer;border:1px solid transparent;user-select:none}
+  .nav a:hover{background:#132139;color:var(--ink)}
+  .nav a.on{background:#152740;color:var(--ink);border-color:#24395a}
+  .nav a svg{width:15px;height:15px;flex:none;opacity:.9}
+  .nav a i{margin-left:auto;font-style:normal;font-size:10.5px;color:var(--dim);background:#1b2b45;
+           border-radius:10px;padding:1px 7px}
+  .nav .navSplit{height:1px;background:var(--line);margin:8px 4px}
+  .nav a.newTask{color:#7dd3fc}
+  .sideFoot{margin-top:auto;font-size:10.5px;line-height:1.75;color:#4e6280;padding:10px 8px 2px;border-top:1px solid #16233a}
+  .shell{margin-left:212px;min-height:100vh}
+  @media(max-width:900px){
+    .side{position:static;width:auto;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;padding:12px}
+    .logo{padding:0 6px}
+    .nav{flex-direction:row;flex-wrap:wrap}
+    .sideFoot{display:none}
+    .shell{margin-left:0}
+  }
+
+  /* ---------- 任务工作台 ---------- */
+  #workView{max-width:1240px;margin:0 auto;padding:22px 26px 60px}
+  .crumb{font-size:11.5px;color:var(--dim);margin-bottom:12px}
+  .crumb span{color:#3d5478;margin:0 6px}
+  .workHead{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+  .workHead h1{font-size:23px;font-weight:800;letter-spacing:.01em}
+  .workHead p{font-size:12px;color:var(--muted);line-height:1.75;margin-top:8px;max-width:740px}
+  .workTools{display:flex;gap:8px;flex:none}
+  .statRow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px}
+  .stat span{font-size:11px;color:var(--muted)}
+  .stat b{display:block;font-size:26px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums}
+  .stat em{font-style:normal;font-size:10.5px;color:var(--dim)}
+  .workBar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .wTabs{display:flex;gap:4px;background:#0f1a2c;border:1px solid var(--line);border-radius:9px;padding:3px}
+  .wtab{background:transparent;border:0;padding:7px 13px;font-size:12px;color:var(--muted);border-radius:6px;font-weight:600}
+  .wtab:hover{background:#16233a;color:var(--ink)}
+  .wtab.on{background:#1b2b45;color:var(--ink)}
+  .search{background:#0f1a2c;border:1px solid var(--line);border-radius:8px;color:var(--ink);
+          padding:8px 12px;font-size:12px;font-family:inherit;width:260px;outline:none}
+  .search:focus{border-color:#35507a}
+  .listPanel{background:var(--panel)}
+  .taskTable th{font-size:11px;padding:11px 14px;background:#0f1a2c;white-space:nowrap}
+  .taskTable td{padding:13px 14px;vertical-align:middle}
+  .taskTable td:nth-child(2),.taskTable td:nth-child(3),.taskTable td:nth-child(5){white-space:nowrap}
+  .taskTable tr:last-child td{border-bottom:0}
+  .tName{font-size:13px;font-weight:700}
+  .tSub{font-size:10.5px;color:var(--dim);margin-top:3px;font-family:ui-monospace,Menlo,monospace}
+  .prog{display:flex;align-items:center;gap:8px}
+  .prog .bar{flex:1}
+  .prog span{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rowBtn{padding:6px 11px;font-size:11.5px;border-radius:7px}
+  .rowBtn.primary{background:#0e7490;border-color:#0e7490}
+  .rowBtn.primary:hover{background:#0891b2}
+  .rowDel{padding:6px 9px;font-size:11.5px;color:#94a3b8}
+  .rowDel:hover{color:#fca5a5;border-color:#7f1d1d}
+  .empty{padding:50px 20px;text-align:center;color:var(--dim);font-size:12px;line-height:1.9}
+  .workNote{font-size:10.5px;color:var(--dim);line-height:1.8;margin-top:12px}
+
+  /* ---------- 监测页：返回与回看条 ---------- */
+  .ghost{background:transparent;padding:6px 11px;font-size:12px;color:var(--muted)}
+  .ghost:hover{color:var(--ink)}
+  .replayBar{display:flex;align-items:center;gap:11px;background:#0f1d31;border:1px solid #24405f;border-radius:10px;
+             padding:9px 14px;margin-top:12px}
+  .rbBadge{font-size:10.5px;font-weight:700;color:#7dd3fc;background:#0c3347;border:1px solid #155e75;
+           padding:2px 8px;border-radius:5px;letter-spacing:.05em;flex:none}
+  .rbClock{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;min-width:104px;flex:none}
+  .replayBar input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;
+    background:linear-gradient(90deg,#0e7490,#38bdf8);outline:none;cursor:pointer}
+  .replayBar input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:#e0f2fe;border:3px solid #0891b2;box-shadow:0 0 10px rgba(56,189,248,.55);cursor:pointer}
+  .rbPos{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;flex:none}
+  .rbHint{font-size:10.5px;color:var(--dim);white-space:nowrap;flex:none}
+  .rbStep{background:#16233a;border:1px solid #24395a;padding:2px 9px;border-radius:6px;font-size:13px;line-height:1.5}
+  @media(max-width:760px){.rbHint{display:none}}
+
+  /* ---------- 地图全屏 ---------- */
+  body.focusMode .side{display:none}
+  body.focusMode .shell{margin-left:0}
+  body.focusMode #dashView .wrap{max-width:none;padding:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  body.focusMode #dashView header,
+  body.focusMode #dashView .kpis,
+  body.focusMode #dashView aside,
+  body.focusMode #dashView .tabs,
+  body.focusMode #dashView .tab-body > .panel-h,
+  body.focusMode #dashView .tab-body > table,
+  body.focusMode #dashView .tab-body > .groupBar,
+  body.focusMode #dashView .tab-body > .note{display:none!important}
+  body.focusMode #dashView .replayBar{margin:0;border-radius:0;border-left:0;border-right:0;flex:none}
+  body.focusMode #dashView .main{display:block;flex:1;min-height:0;grid-template-columns:1fr}
+  body.focusMode #dashView .main > .panel{height:100%;border:0;border-radius:0;display:flex;flex-direction:column}
+  body.focusMode #dashView .tab-body{flex:1;min-height:0;padding:0;display:flex;flex-direction:column}
+  body.focusMode #dashView .mapWrap{flex:1;min-height:0;margin:0;border:0;border-radius:0}
+  body.focusMode #dashView .mapSvg{width:100%;height:100%;aspect-ratio:auto}
+  body.focusMode #dashView .focusClock{display:block;position:absolute;left:64%;top:10px;transform:translateX(-50%);
+    background:rgba(8,14,28,.86);border:1px solid #24405f;border-radius:8px;padding:4px 16px;
+    font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:#e8eefc;letter-spacing:.04em;
+    pointer-events:none;white-space:nowrap;z-index:2}
+  body.focusMode #dashView .mapLegend{max-width:calc(56% - 40px)}
+</style>
+</head>
+<body>
+<aside class="side">
+  <div class="logo">
+    <div class="mark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e0f2fe" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l7 3v6c0 4.2-2.9 7.7-7 9-4.1-1.3-7-4.8-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+    <div><b>警力调度指挥台</b><small>TRAFFIC OPS · DEMO</small></div>
+  </div>
+  <nav class="nav">
+    <a data-nav="all" class="on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      任务工作台
+    </a>
+    <a data-nav="running">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg>
+      运行中任务<i id="navRunning">0</i>
+    </a>
+    <a data-nav="done">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      历史任务<i id="navDone">0</i>
+    </a>
+    <div class="navSplit"></div>
+    <a data-nav="new" class="newTask">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+      新建任务
+    </a>
+  </nav>
+  <div class="sideFoot">数据由本项目模型模拟生成，仅用于演示。<br>一个任务 = 一天 48 个时段，跑满自动归档。</div>
+</aside>
+
+<div class="shell">
+  <!-- ============ 任务工作台 ============ -->
+  <section id="workView">
+    <div class="crumb">指挥台<span>/</span>任务工作台</div>
+    <div class="workHead">
+      <div>
+        <h1>任务工作台</h1>
+        <p>每个任务是一天的值守安排。新建任务、选好辖区和警力后进入监测；跑满一天会自动归档到历史任务，点“回看”拖动底部时间条，就能查看任意时刻的现场状态。</p>
+      </div>
+      <div class="workTools">
+        <button id="btnRefresh">刷新</button>
+        <button id="btnNew" class="primary">＋ 新建任务</button>
+      </div>
+    </div>
+
+    <div class="statRow">
+      <div class="stat"><span>运行中任务</span><b id="statRunning">0</b><em>点“进入监测”看实时状态</em></div>
+      <div class="stat"><span>历史任务</span><b id="statDone">0</b><em>拖动进度条即可回看</em></div>
+      <div class="stat"><span>任务总数</span><b id="statAll">0</b><em>每个任务独立保存</em></div>
+    </div>
+
+    <div class="workBar">
+      <div class="wTabs">
+        <button class="wtab on" data-filter="all">全部任务</button>
+        <button class="wtab" data-filter="running">运行中</button>
+        <button class="wtab" data-filter="done">历史任务</button>
+      </div>
+      <input id="taskSearch" class="search" placeholder="搜索任务名称或编号…">
+    </div>
+
+    <div class="panel listPanel">
+      <table class="taskTable">
+        <thead><tr>
+          <th style="width:30%">任务名称</th><th>辖区</th><th>警力</th>
+          <th style="width:19%">进度</th><th>状态</th>
+          <th style="width:160px;text-align:right">操作</th>
+        </tr></thead>
+        <tbody id="taskRows"></tbody>
+      </table>
+    </div>
+    <div class="workNote">提示：任务只有打开时才会推进时间，关掉页面不会空跑。回看是只读的，不会改动保存的历史。</div>
+  </section>
+
+  <!-- ============ 监测首页 ============ -->
+  <section id="dashView" class="hide">
+<div class="wrap">
+  <header>
+    <button id="btnBack" class="ghost">← 工作台</button>
+    <div class="brand">交警警力调度指挥台<small id="taskSub">任务监测</small></div>
+    <div class="clockbox">
+      <div class="clock" id="clock">06:00</div>
+      <div class="meta">
+        <div id="dayInfo">第 1 天 · 工作日</div>
+        <div id="wxInfo">天气 晴 · 86 个断面在线</div>
+        <div id="scopeInfo">辖区 全线 · 20 个警组</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="btnPlay" class="primary">暂停</button>
+      <button id="btnStep">单步推进</button>
+      <button id="btnReset">重置</button>
+    </div>
+  </header>
+
+  <div class="replayBar hide" id="replayBar">
+    <span class="rbBadge">回看</span>
+    <span class="rbClock" id="rbClock">06:00</span>
+    <button class="rbStep" id="rbPrev" title="上一个时段">‹</button>
+    <input type="range" id="rbRange" min="0" max="48" step="1" value="0">
+    <button class="rbStep" id="rbNext" title="下一个时段">›</button>
+    <span class="rbPos" id="rbPos">0 / 48</span>
+    <span class="rbHint" id="rbHint">拖动查看当时状态</span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="k">当前拥堵断面</div><div class="v bad" id="kCong">--</div><div class="s" id="kCongS">其中严重 --</div></div>
+    <div class="kpi"><div class="k">警力需求</div><div class="v brand" id="kDemand">--</div><div class="s" id="kDemandS">按拥堵等级折算的警组数</div></div>
+    <div class="kpi"><div class="k">在岗警组</div><div class="v" id="kActive">--</div><div class="s" id="kActiveS">现场处置 --</div></div>
+    <div class="kpi"><div class="k">待命警组</div><div class="v ok" id="kIdle">--</div><div class="s">可立即调动的余量</div></div>
+    <div class="kpi"><div class="k">平均到场</div><div class="v" id="kArrive">--<em>分钟</em></div><div class="s">自派单至抵达现场</div></div>
+    <div class="kpi"><div class="k">设备异常</div><div class="v warn" id="kFault">--</div><div class="s">冻结 / 掉零 / 尖峰 / 漂移</div></div>
+  </div>
+
+  <div class="main">
+    <section class="panel">
+      <div class="tabs">
+        <div class="tab on" data-tab="dispatch">警力分配<i id="nNeed">0</i></div>
+        <div class="tab" data-tab="task">任务监控<i id="nTask">0</i></div>
+        <div class="tab" data-tab="device">设备状态<i id="nAlarm">0</i></div>
+      </div>
+      <div class="tab-body" id="tabBody"></div>
+    </section>
+
+    <aside class="panel">
+      <div class="panel-h"><h2>实时事件</h2><span class="sub">按时间倒序</span></div>
+      <div class="feed" id="feed"></div>
+    </aside>
+  </div>
+</div>
+  </section>
+</div>
+
+<div class="modalMask" id="setupMask">
+  <div class="modal">
+    <h3>新建任务</h3>
+    <div class="sub">一个任务就是一天的执勤安排：选好你负责的道路和可用警力，点“创建并开始”会进入监测首页，从早上 6 点开始自动推进。</div>
+    <div class="field" style="border-top:0;padding-top:0">
+      <label>任务名称</label>
+      <input class="textInput" id="inpName" maxlength="40" placeholder="例如：早高峰全线值守（留空自动命名）">
+    </div>
+    <div class="field">
+      <label>管辖道路</label>
+      <div class="checks">
+        <label><input type="checkbox" id="ckLine1" checked> 干线一 <em>64 个断面 · S001–S064</em></label>
+        <label><input type="checkbox" id="ckLine2" checked> 干线二 <em>22 个断面 · S065–S086</em></label>
+      </div>
+    </div>
+    <div class="field">
+      <label>可用警力</label>
+      <div class="numRow">
+        <input type="number" id="inpGroups" min="4" max="40" step="1" value="20"> 个警组
+        <span class="sub">建议 8~24 组；不够时按拥堵程度排序，先保严重路段</span>
+      </div>
+    </div>
+    <div class="presets">
+      <span>典型样例：</span>
+      <button data-preset="all">全线 · 20 组</button>
+      <button data-preset="l1">干线一 · 16 组</button>
+      <button data-preset="l2">干线二 · 8 组</button>
+    </div>
+    <div class="modalFoot">
+      <button id="btnSetupCancel">取消</button>
+      <button id="btnSetupStart" class="primary">创建并开始</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let S = null, tab = 'dispatch', timer = null;
+let TASKS = [], filter = 'all', q = '', currentTask = null;
+let replayMode = false, rbSeq = 0, timerOn = false;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pctColor = k => k;
+
+/* ---------- 二维路网图 ---------- */
+const MAP_W = 1400, MAP_H = 620;
+const MAP_PATHS = {
+  '干线一': 'M 60 182 C 240 112, 420 238, 640 178 C 860 118, 1030 232, 1180 176 C 1268 145, 1312 160, 1340 172',
+  '干线二': 'M 210 500 C 370 552, 520 432, 700 482 C 880 532, 1010 424, 1140 480'
+};
+const RAMPS = [
+  'M 420 196 C 446 300, 372 404, 318 492',
+  'M 960 196 C 976 300, 902 404, 878 478'
+];
+const MINOR_ROADS = [
+  'M 170 70 L 170 590', 'M 430 70 L 430 590', 'M 700 70 L 700 590',
+  'M 970 70 L 970 590', 'M 1220 70 L 1220 590',
+  'M 60 92 L 1340 92', 'M 80 330 L 1320 330', 'M 120 586 L 1300 586'
+];
+const TEAM_COLORS = ['#38bdf8', '#c084fc', '#fb7185', '#34d399'];
+const TEAM_NAMES = ['一中队', '二中队', '三中队', '四中队'];
+const LEVEL_FILL = {ok:'#3b82f6', slow:'#eab308', warn:'#f97316', bad:'#ef4444'};
+const RANK = {ok:0, slow:1, warn:2, bad:3};
+
+let mapView = {x:0, y:0, w:MAP_W, h:MAP_H};
+let selIdx = null, geo = null, dragging = false, suppressClick = 0;
+let selGroup = null, assignMode = false;   // selGroup：选中的警组；assignMode：等待点击断面改派
+
+function teamOf(g){
+  const n = parseInt(g.id.replace('QG-',''), 10) - 1;
+  return n >= 0 ? n % 4 : 0;
+}
+
+function ensureGeo(){
+  if (geo || !S) return geo;
+  const ns = 'http://www.w3.org/2000/svg';
+  const holder = document.createElementNS(ns, 'svg');
+  holder.setAttribute('width', '0'); holder.setAttribute('height', '0');
+  holder.style.position = 'absolute'; holder.style.left = '-9999px';
+  document.body.appendChild(holder);
+  geo = {pos:new Map(), paths:{}};
+  for (const [line, d] of Object.entries(MAP_PATHS)){
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', d); holder.appendChild(p);
+    geo.paths[line] = {d, len:p.getTotalLength(), el:p};
+  }
+  const byLine = {};
+  S.stations.forEach(s => (byLine[s.line] = byLine[s.line] || []).push(s));
+  for (const [line, list] of Object.entries(byLine)){
+    const g = geo.paths[line];
+    if (!g) continue;
+    list.sort((a,b) => a.idx - b.idx);
+    list.forEach((s, i) => {
+      const pt = g.el.getPointAtLength(((i + 0.5) / list.length) * g.len);
+      geo.pos.set(s.idx, {x:pt.x, y:pt.y});
+    });
+  }
+  return geo;
+}
+
+function nearestPos(idx){
+  let best = null, bd = 1e9;
+  for (const s of S.stations){
+    const d = Math.abs(s.idx - idx);
+    if (d < bd){ bd = d; best = s.idx; }
+  }
+  return geo.pos.get(best);
+}
+
+function applyMapView(svg){
+  svg.setAttribute('viewBox', `${mapView.x} ${mapView.y} ${mapView.w} ${mapView.h}`);
+}
+
+function clampView(v){
+  const w = Math.min(MAP_W, Math.max(240, v.w));
+  const h = w * MAP_H / MAP_W;
+  return {w, h,
+    x: Math.max(0, Math.min(MAP_W - w, v.x)),
+    y: Math.max(0, Math.min(MAP_H - h, v.y))};
+}
+
+function zoomBy(f, cx, cy){
+  const nw = Math.min(MAP_W, Math.max(240, mapView.w * f));
+  const nh = nw * MAP_H / MAP_W;
+  const rx = (cx - mapView.x) / mapView.w, ry = (cy - mapView.y) / mapView.h;
+  mapView = clampView({w:nw, h:nh, x:cx - rx * nw, y:cy - ry * nh});
+  render();
+}
+
+function focusStation(idx){
+  if (!geo || !geo.pos.get(idx)) return;
+  const p = geo.pos.get(idx);
+  selIdx = idx;
+  const w = 460, h = w * MAP_H / MAP_W;
+  mapView = clampView({w, h, x:p.x - w / 2, y:p.y - h / 2});
+  render();
+}
+
+/* 手动改派：把选中的警组指到点击的断面，服务端会再做一次"尽量少改动"的重排 */
+async function doAssign(idx){
+  if (!S || !S.taskId || !selGroup) return;
+  const gid = selGroup;
+  const r = await fetch(`/api/tasks/${S.taskId}/assign`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({group: gid, idx})
+  });
+  const d = await r.json();
+  if (!r.ok){ alert(d.error || '改派失败'); return; }
+  assignMode = false;
+  S = d;
+  selIdx = idx;
+  render();
+}
+
+/* 松手时按坐标判断点到了什么：直接找实际命中的元素，
+   这样即使地图拖拽捕获了指针，也不会吞掉警员 / 断面的点击。 */
+function mapTap(cx, cy){
+  if (Date.now() < suppressClick) return;
+  const el = document.elementFromPoint(cx, cy);
+  if (!el || !el.closest) return;
+  const gEl = el.closest('[data-gid]');
+  if (gEl){
+    if (assignMode) return;             // 改派模式下只等点击断面
+    selGroup = gEl.dataset.gid;
+    selIdx = null;
+    render();
+    return;
+  }
+  const sEl = el.closest('[data-idx]');
+  if (!sEl) return;
+  const idx = parseInt(sEl.dataset.idx, 10);
+  if (isNaN(idx)) return;
+  if (assignMode && selGroup){ doAssign(idx); return; }
+  focusStation(idx);
+}
+
+function toMap(e, svg){  const r = svg.getBoundingClientRect();
+  return {
+    x: mapView.x + (e.clientX - r.left) / r.width * mapView.w,
+    y: mapView.y + (e.clientY - r.top) / r.height * mapView.h
+  };
+}
+
+function buildMapSVG(){
+  ensureGeo();
+  let grid = '';
+  for (let x = 0; x <= MAP_W; x += 70) grid += `<line x1="${x}" y1="0" x2="${x}" y2="${MAP_H}" stroke="#12223a"/>`;
+  for (let y = 0; y <= MAP_H; y += 70) grid += `<line x1="0" y1="${y}" x2="${MAP_W}" y2="${y}" stroke="#12223a"/>`;
+
+  const minor = MINOR_ROADS.map(d => `<path d="${d}" fill="none" stroke="#1c3f66" stroke-width="2" opacity=".55"/>`).join('');
+  const ramps = RAMPS.map(d => `<path d="${d}" fill="none" stroke="#245181" stroke-width="2.4" opacity=".7"/>`).join('');
+  const J = new Set(S.jurisdiction || S.stations.map(s => s.idx));
+  const roads = Object.entries(geo.paths).map(([line, g]) => {
+    const on = S.stations.some(s => s.line === line && J.has(s.idx));
+    return `
+    <path d="${g.d}" fill="none" stroke="${on ? '#0c2347' : '#0e1726'}" stroke-width="14" stroke-linecap="round"/>
+    <path d="${g.d}" fill="none" stroke="${on ? '#2563eb' : '#22334d'}" stroke-width="7.5" stroke-linecap="round"/>
+    <path d="${g.d}" fill="none" stroke="#9cc7ff" stroke-width="1" stroke-dasharray="9 10" opacity="${on ? .3 : .1}"/>`;
+  }).join('');
+
+  let cong = '';
+  for (const line of Object.keys(geo.paths)){
+    const list = S.stations.filter(s => s.line === line).sort((a,b) => a.idx - b.idx);
+    if (!list.some(s => s.managed)) continue;      // 非辖区不铺拥堵色
+    for (let i = 0; i < list.length - 1; i++){
+      const a = geo.pos.get(list[i].idx), b = geo.pos.get(list[i + 1].idx);
+      if (!a || !b) continue;
+      const sev = Math.max(RANK[list[i].levelKey], RANK[list[i + 1].levelKey]);
+      if (!sev) continue;
+      const c = ['', '#eab308', '#f97316', '#ef4444'][sev];
+      if (sev === 3) cong += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${c}" stroke-width="16" stroke-linecap="round" opacity=".15"/>`;
+      cong += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${c}" stroke-width="7.5" stroke-linecap="round" opacity=".92"/>`;
+    }
+  }
+
+  // 一名警员负责的连续路段：画一条半透明色带，表示这段路有人管
+  let zones = '';
+  for (const t of S.tasks){
+    if (t.status !== 'enroute' && t.status !== 'onsite') continue;
+    const z = (t.zone || [t.idx]).slice().sort((a, b) => a - b);
+    if (z.length < 2) continue;
+    const pts = z.map(i => geo.pos.get(i)).filter(Boolean);
+    if (pts.length < 2) continue;
+    const d = pts.map((p, k) => `${k ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const grp = S.groups.find(x => x.id === t.group);
+    const c = TEAM_COLORS[grp ? teamOf(grp) : 0];
+    zones += `<path d="${d}" fill="none" stroke="${c}" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" opacity=".13"/>`;
+    zones += `<path d="${d}" fill="none" stroke="${c}" stroke-width="1.2" stroke-dasharray="5 5" opacity=".45"/>`;
+  }
+
+  const zoomed = mapView.w < 900;
+  const fs = Math.max(6, Math.min(10, mapView.w / 110));
+  const stations = S.stations.map(s => {
+    const p = geo.pos.get(s.idx);
+    if (!p) return '';
+    const on = s.managed !== false;
+    const fill = on ? LEVEL_FILL[s.levelKey] : '#33455f';
+    let extra = '';
+    if (on && s.levelKey === 'bad') extra += `<circle cx="${p.x}" cy="${p.y}" r="9.5" fill="${fill}" opacity=".18"/>`;
+    if (on && s.detected) extra += `
+      <circle cx="${p.x}" cy="${p.y}" r="8" fill="none" stroke="#fbbf24" stroke-width="2">
+        <animate attributeName="r" values="7;17" dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values=".95;0" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+      <g transform="translate(${p.x},${p.y - 20})">
+        <polygon points="0,-8 7.5,3 -7.5,3" fill="#fbbf24" stroke="#08111f" stroke-width="1.2"/>
+        <text y="2.4" text-anchor="middle" font-size="8" font-weight="800" fill="#08111f">!</text>
+      </g>`;
+    const label = zoomed && on
+      ? `<text x="${p.x}" y="${p.y + 16}" text-anchor="middle" font-size="${fs}" fill="#8fa6c6">${s.sid}</text>`
+      : '';
+    return `<g data-idx="${s.idx}" style="cursor:pointer">
+      <circle cx="${p.x}" cy="${p.y}" r="10" fill="transparent"/>
+      ${extra}
+      <circle cx="${p.x}" cy="${p.y}" r="${on && s.levelKey === 'bad' ? 5.6 : (on ? 4.3 : 3.2)}"
+              fill="${fill}" stroke="#08111f" stroke-width="1.6" opacity="${on ? 1 : .75}"/>
+      ${label}
+    </g>`;
+  }).join('');
+
+  const posKey = g => g.station ? g.station : (g.postSid ? 'P' + g.postSid : 'H' + g.home);
+  const stamp = {};
+  S.groups.forEach(g => { const k = posKey(g); (stamp[k] = stamp[k] || []).push(g); });
+  const police = S.groups.map(g => {
+    const tid = teamOf(g), color = TEAM_COLORS[tid], num = g.id.slice(-2);
+    const st = g.station ? S.stations.find(s => s.sid === g.station) : null;
+    const post = (!g.station && g.postSid) ? S.stations.find(s => s.sid === g.postSid) : null;
+    let pos, route = '';
+    if (g.status === 'enroute' && st){
+      const a = nearestPos(g.home), b = geo.pos.get(st.idx);
+      const eta0 = Math.max(1, Math.min(6, 1 + Math.abs(g.home - st.idx) / 15));
+      const k = Math.max(0, Math.min(1, 1 - (g.eta || 0) / eta0));
+      pos = {x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k - 16};
+      route = `<line x1="${a.x}" y1="${a.y - 16}" x2="${b.x}" y2="${b.y - 16}" stroke="${color}"
+               stroke-width="1.6" opacity=".5" class="teamRoute"/>`;
+    } else if (g.status === 'onsite' && st){
+      const p = geo.pos.get(st.idx); pos = {x:p.x, y:p.y - 17};
+    } else if (g.status === 'idle' && post){
+      const p = geo.pos.get(post.idx); pos = {x:p.x, y:p.y - 17};
+    } else {
+      const p = nearestPos(g.home); pos = {x:p.x, y:p.y - 17};
+    }
+    const arr = stamp[posKey(g)] || [g];
+    const j = arr.indexOf(g);
+    const dx = (j - (arr.length - 1) / 2) * 16;
+    const my = pos.y - (arr.length > 2 ? (j % 2) * 15 : 0);
+    const mx = pos.x + dx;
+    const op = g.status === 'idle' ? (post ? .85 : .55) : (g.status === 'returning' ? .75 : 1);
+    const ring = g.status === 'onsite'
+      ? `<circle cx="${mx}" cy="${my}" r="13" fill="none" stroke="${color}" stroke-width="1.4" opacity=".6"/>`
+      : (g.status === 'idle' && post
+        ? `<circle cx="${mx}" cy="${my}" r="13" fill="none" stroke="${color}" stroke-width="1.3" stroke-dasharray="4 3" opacity=".9"/>`
+        : '');
+    const picked = selGroup === g.id
+      ? `<circle cx="${mx}" cy="${my}" r="15" fill="none" stroke="#f8fafc" stroke-width="1.6" opacity=".9"/>` : '';
+    return `${route}<g data-gid="${g.id}" style="cursor:pointer">
+      <title>${esc(g.name)}（${g.id}）· 点击可改派</title>
+      ${ring}${picked}
+      <circle cx="${mx}" cy="${my}" r="14" fill="transparent"/>
+      <circle cx="${mx}" cy="${my}" r="9" fill="${color}" stroke="#06101f" stroke-width="2" opacity="${op}"/>
+      <text x="${mx}" y="${my + 3}" text-anchor="middle" font-size="8.5" font-weight="800" fill="#06101f" opacity="${op}">${num}</text>
+    </g>`;
+  }).join('');
+
+  const lineLabels = Object.entries(geo.paths).map(([line, g]) => {
+    const p = g.el.getPointAtLength(30);
+    return `<text x="${p.x}" y="${p.y - 15}" font-size="12" font-weight="700" fill="#6f8cb4" letter-spacing="2">${line}</text>`;
+  }).join('');
+
+  return `<rect width="${MAP_W}" height="${MAP_H}" fill="#0b1526"/>${grid}${minor}${ramps}${roads}${cong}${zones}${stations}${police}${lineLabels}`;
+}
+
+function mapLegendHTML(){
+  const team = TEAM_NAMES.map((n, i) =>
+    `<span><i class="dot" style="background:${TEAM_COLORS[i]}"></i>${n}</span>`).join('');
+  return `<div class="mapLegend">
+    <div class="lgHead">图例<em>鼠标移入展开</em></div>
+    <div class="lgBody">
+    <div class="lg"><b>路况</b>
+      <span><i style="background:#2563eb"></i>畅通</span>
+      <span><i style="background:#eab308"></i>缓行</span>
+      <span><i style="background:#f97316"></i>拥堵</span>
+      <span><i style="background:#ef4444"></i>严重拥堵</span>
+    </div>
+    <div class="lg"><b>警队</b>${team}</div>
+    <div class="lg"><b>其他</b>
+      <span><i style="background:#38bdf8;opacity:.25"></i>警员负责路段</span>
+      <span><i class="dot" style="background:#0b1526;border:1.5px dashed #38bdf8"></i>预置待命</span>
+      <span><i class="dot" style="background:#fbbf24;box-shadow:0 0 6px #fbbf24"></i>设备异常（闪烁）</span>
+      <span><i style="background:#1c3f66;height:2px"></i>普通道路 / 匝道</span>
+      <span><i style="background:#33455f"></i>非辖区</span>
+      <span style="color:#7b8fb0">圆标内为警组号 · 点警员可改派</span>
+    </div>
+    </div>
+  </div>`;
+}
+
+function detailHTML(){
+  if (selIdx == null) return '';
+  const s = S.stations.find(x => x.idx === selIdx);
+  if (!s) return '';
+  // 谁管这个断面：看在该断面覆盖范围内的在途 / 在场任务
+  const at = S.tasks.filter(t => (t.status === 'enroute' || t.status === 'onsite')
+                                 && (t.zone || [t.idx]).includes(s.idx));
+  return `<div class="mapDetail">
+    <div class="h"><b>${s.sid}</b>${levelTag(s.levelKey, s.level)}
+      <span class="muted" style="font-size:10.5px">${s.line}·${s.dir}·${s.lanes}车道</span>
+      <span class="x" id="dcClose">×</span></div>
+    <div class="g">
+      <span>车速 <b>${s.speed}</b><span class="unit"> km/h</span></span>
+      <span>流量 <b>${s.flow}</b><span class="unit"> 辆/h</span></span>
+      <span>占有率 <b>${s.occ}</b><span class="unit"> %</span></span>
+      <span>拥堵概率 <b>${s.prob}</b><span class="unit"> %</span></span>
+      <span>需警力 <b>${s.need}</b><span class="unit"> 组</span></span>
+      <span>在岗 <b>${s.assigned}</b><span class="unit"> 组</span></span>
+      <span style="grid-column:span 2">设备 <b style="color:${s.detected ? '#fbbf24' : '#86efac'}">${s.detected ? s.fault + '（健康度 ' + s.health + '）' : '正常'}</b></span>
+      <span style="grid-column:span 2">负责警组 <b>${at.length ? at.map(t => t.group).join('、') : '—'}</b></span>
+    </div>
+    ${assignMode && selGroup ? `<div class="gcHint" style="margin-top:8px">点击这个断面，就把 ${selGroup} 改派到这里</div>` : ''}
+  </div>`;
+}
+
+function sidOfIdx(idx){
+  const s = S && S.stations.find(x => x.idx === idx);
+  return s ? s.sid : '';
+}
+
+function groupCardHTML(){
+  if (!selGroup || !S) return '';
+  const g = S.groups.find(x => x.id === selGroup);
+  if (!g) return '';
+  const stName = {idle:'待命', enroute:'前往中', onsite:'现场处置', returning:'返回中'}[g.status] || g.status;
+  const cls = g.status === 'idle' ? 'ok' : g.status === 'onsite' ? 'bad' : 'warn';
+  const acts = S.tasks.filter(t => (t.status === 'enroute' || t.status === 'onsite') && t.group === g.id);
+  const zones = acts.map(t => {
+    const z = (t.zone || [t.idx]).slice().sort((a, b) => a - b);
+    return z.length > 1 ? `${sidOfIdx(z[0])}–${sidOfIdx(z[z.length - 1])}（${z.length} 个断面）` : sidOfIdx(z[0]);
+  });
+  const cur = zones.length ? zones.join('、')
+            : (g.status === 'idle' && g.postSid ? `${g.postSid} 预置待命` : '驻地待命');
+  const frozen = replayMode || S.status === 'done';
+  return `<div class="mapGroup">
+    <div class="h"><span class="gdot" style="background:${TEAM_COLORS[teamOf(g)]}"></span><b>${g.id}</b>
+      <span class="tag ${cls}">${stName}</span><span class="x" id="gcClose">×</span></div>
+    <div class="gcName">${esc(g.name)}</div>
+    <div class="gcRow">负责路段：<b>${cur}</b></div>
+    ${(g.status === 'idle' && g.postSid) ? `<div class="gcRow">预测待命：<b>${g.postSid}</b>，1 小时后概率 <b>${g.postProb ?? '—'}%</b></div>` : ''}
+    ${assignMode
+      ? `<div class="gcHint">请在地图上点击一个断面，指定 ${g.id} 的新位置。</div>
+         <div class="gcBtns"><button id="gcCancel">取消改派</button></div>`
+      : `<div class="gcBtns">${frozen ? '' : '<button class="primary" id="gcAssign">改派位置</button>'}<button id="gcCloseBtn">关闭</button></div>`}
+  </div>`;
+}
+
+function bindMap(){
+  const svg = $('mapSvg');
+  if (!svg) return;
+  applyMapView(svg);
+
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const p = toMap(e, svg);
+    zoomBy(e.deltaY > 0 ? 1.12 : 0.89, p.x, p.y);
+  }, {passive:false});
+
+  let drag = null;
+  svg.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    drag = {x:e.clientX, y:e.clientY, vx:mapView.x, vy:mapView.y, w:mapView.w, h:mapView.h, moved:false};
+    dragging = true;
+    svg.classList.add('dragging');
+    svg.setPointerCapture(e.pointerId);
+  });
+  svg.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const r = svg.getBoundingClientRect();
+    const dx = (e.clientX - drag.x) / r.width * drag.w;
+    const dy = (e.clientY - drag.y) / r.height * drag.h;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
+    mapView = clampView({w:drag.w, h:drag.h, x:drag.vx - dx, y:drag.vy - dy});
+    applyMapView(svg);
+  });
+  const endDrag = e => {
+    if (!drag) return;
+    const tap = e.type === 'pointerup' && !drag.moved;
+    const cx = e.clientX, cy = e.clientY;
+    if (drag.moved) suppressClick = Date.now() + 180;
+    dragging = false;
+    drag = null;
+    svg.classList.remove('dragging');
+    if (tap) mapTap(cx, cy);
+  };
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+
+  svg.classList.toggle('assigning', assignMode);
+  if ($('gcAssign')) $('gcAssign').onclick = () => { assignMode = true; render(); };
+  if ($('gcCancel')) $('gcCancel').onclick = () => { assignMode = false; render(); };
+  const closeG = () => { selGroup = null; assignMode = false; render(); };
+  if ($('gcClose')) $('gcClose').onclick = closeG;
+  if ($('gcCloseBtn')) $('gcCloseBtn').onclick = closeG;
+
+  $('mZoomIn').onclick = () => zoomBy(0.55, mapView.x + mapView.w / 2, mapView.y + mapView.h / 2);
+  $('mZoomOut').onclick = () => zoomBy(1.8, mapView.x + mapView.w / 2, mapView.y + mapView.h / 2);
+  $('mReset').onclick = () => { mapView = {x:0, y:0, w:MAP_W, h:MAP_H}; selIdx = null; render(); };
+  $('mFull').onclick = toggleFocus;
+  const dc = $('dcClose');
+  if (dc) dc.onclick = () => { selIdx = null; render(); };
+}
+
+function levelTag(k, t){
+  return `<span class="tag ${k}">${t}</span>`;
+}
+
+function render(){
+  if (dragging) return;
+  const k = S.kpi;
+  $('clock').textContent = S.clock;
+  $('dayInfo').textContent = `第 ${S.day} 天 · 工作日`;
+  $('wxInfo').textContent = `天气 ${S.weather} · 86 个断面在线`;
+  const owned = S.stations.filter(s => s.managed);
+  const ownedLines = [...new Set(owned.map(s => s.line))];
+  $('scopeInfo').textContent = `辖区 ${ownedLines.join(' + ') || '—'} · ${S.groupCount} 个警组`;
+  $('btnPlay').textContent = S.playing ? '暂停' : '继续';
+  $('taskSub').textContent = `${S.taskName || '任务监测'} · ${replayMode ? '历史回看' : (S.status === 'done' ? '已完成' : '实时监测')}`;
+
+  $('kCong').textContent = k.congested;
+  $('kCongS').textContent = `其中严重 ${k.severe}`;
+  $('kDemand').textContent = k.demand;
+  $('kDemandS').innerHTML = k.demand > (k.assigned + k.idle)
+    ? `现有 ${k.assigned + k.idle} 组 · <span style="color:#f87171">缺口 ${k.demand - k.assigned - k.idle}</span>`
+    : `现有 ${k.assigned + k.idle} 组 · 可满足`;
+  $('kActive').textContent = k.assigned;
+  $('kActiveS').textContent = `现场处置 ${k.onsite} · 已完结 ${k.doneToday}`;
+  $('kIdle').textContent = k.idle;
+  $('kArrive').innerHTML = k.avgArrive ? `${k.avgArrive}<em>分钟</em>` : '—';
+  $('kFault').textContent = k.faults;
+
+  $('nNeed').textContent = S.stations.filter(s=>s.need>0).length;
+  $('nTask').textContent = S.tasks.filter(t=>t.status==='enroute'||t.status==='onsite').length;
+  $('nAlarm').textContent = S.alarms.length;
+
+  if(tab==='dispatch') renderDispatch();
+  if(tab==='task') renderTask();
+  if(tab==='device') renderDevice();
+  renderFeed();
+}
+
+function renderDispatch(){
+  if (replayMode || S.status === 'done') assignMode = false;
+  if (selGroup && !S.groups.some(g => g.id === selGroup)){ selGroup = null; assignMode = false; }
+
+  const need = S.stations.filter(s=>s.managed && (s.need>0 || s.assigned>0)).sort((a,b)=>b.prob-a.prob).slice(0,12);
+  const rows = need.map(s=>{
+    const gap = s.need - s.assigned;
+    return `<tr>
+      <td><b>${s.sid}</b><div class="muted" style="font-size:10.5px">${s.line} · ${s.dir} · ${s.lanes}车道</div></td>
+      <td>${levelTag(s.levelKey, s.level)}</td>
+      <td><b>${s.prob}%</b></td>
+      <td>${s.speed}</td>
+      <td>${s.flow}</td>
+      <td>${s.need}</td>
+      <td>${s.assigned}</td>
+      <td>${gap>0?`<span class="tag bad">缺口 ${gap}</span>`:`<span class="tag ok">已覆盖</span>`}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" class="muted">当前没有需要派驻警力的断面</td></tr>`;
+
+  const g = S.groups;
+  const cnt = {idle:0,enroute:0,onsite:0,returning:0};
+  g.forEach(x=>cnt[x.status]++);
+  const groupBar = `
+    <div class="groupBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      ${g.map(x=>{
+        const c = x.status==='idle'?'ok':x.status==='enroute'?'warn':x.status==='onsite'?'bad':'gray';
+        const txt = x.status==='idle'?'待命':x.status==='enroute'?'前往中':x.status==='onsite'?'现场处置':'返回中';
+        const extra = x.station ? ' · '+x.station : (x.status==='idle' && x.postSid ? ' · '+x.postSid+' 预置' : '');
+        const dot = `<i style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${TEAM_COLORS[teamOf(x)]};margin-right:5px;vertical-align:1px"></i>`;
+        return `<span class="tag ${c}" title="${x.name}">${dot}${x.id} ${txt}${extra}</span>`;
+      }).join('')}
+    </div>`;
+
+  const fc = S.forecast;
+  const fcHTML = (fc && fc.points && fc.points.length) ? `<div class="fcBar">
+      <b>预测热点</b><span class="fx">${esc(fc.source)} · ${esc(fc.ahead)}</span>
+      ${fc.points.map(p => `<span class="pt">${p.sid}<span class="pv">${p.prob}%</span></span>`).join('')}
+      <span class="fx" style="margin-left:auto">没出警的警组去这些地方待命</span>
+    </div>` : '';
+
+  $('tabBody').innerHTML = `
+    <div class="mapWrap">
+      ${mapLegendHTML()}
+      <div class="mapTools">
+        <button id="mZoomIn" title="放大">＋</button>
+        <button id="mZoomOut" title="缩小">－</button>
+        <button id="mReset">复位</button>
+        <button id="mFull" title="全屏查看地图">${document.body.classList.contains('focusMode') ? '退出全屏' : '全屏'}</button>
+      </div>
+      <svg id="mapSvg" class="mapSvg" preserveAspectRatio="xMidYMid meet">${buildMapSVG()}</svg>
+      <div class="focusClock">${S.day > 1 ? '第' + S.day + '天 ' : ''}${S.clock}</div>
+      <div class="mapHint">滚轮缩放 · 拖动平移 · 点断面看详情 · ${replayMode || S.status === 'done' ? '回看模式' : '点警员可改派'}</div>
+      ${detailHTML()}
+      ${groupCardHTML()}
+    </div>
+    ${fcHTML}
+    <div class="panel-h" style="padding:14px 0 6px;border-bottom:0"><h2>需派警断面</h2><span class="sub">按拥堵概率降序 · 每 30 分钟自动重算</span></div>
+    <table>
+      <thead><tr><th>断面</th><th>状态</th><th>拥堵概率</th><th>车速</th><th>流量</th><th>需警力</th><th>在岗</th><th>覆盖</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="panel-h" style="padding:16px 0 6px;border-bottom:0"><h2>警组状态</h2><span class="sub">共 ${g.length} 组 · 待命 ${cnt.idle} · 前往 ${cnt.enroute} · 处置 ${cnt.onsite}</span></div>
+    ${groupBar}
+    <div class="note">分配规则：把连续拥堵的断面合成一段（段与段之间留一个断面空隙也合并）；先保证每个拥堵段至少有 1 组，警力不够时一名警员负责一整段连续断面（最多 8 个），而不是全挤在一个点；警力有余时，多出的组按预测模型给出的 1 小时后热点提前待命。手动改派只会给空缺处补人，已经在途 / 在场的任务不推翻。分级阈值按本模型概率分布标定：≥50% 严重拥堵、30%~50% 拥堵、14%~30% 缓行。</div>
+  `;
+  bindMap();
+}
+
+function renderTask(){
+  const t = S.tasks.filter(x=>x.status!=='done'&&x.status!=='cancel').concat(S.tasks.filter(x=>x.status==='done').slice(0,4));
+  const cards = t.map(x=>{
+    const label = {enroute:'前往中', onsite:'现场处置', done:'已完成', cancel:'已撤单'}[x.status];
+    const c = {enroute:'warn', onsite:'bad', done:'ok', cancel:'gray'}[x.status];
+    const z = (x.zone || [x.idx]).slice().sort((a,b)=>a-b);
+    const span = z.length > 1 ? `${sidOfIdx(z[0])}–${sidOfIdx(z[z.length-1])}（${z.length} 个断面）` : x.sid;
+    const prog = x.status==='enroute' ? Math.max(10, 100 - x.eta*18)
+               : x.status==='onsite' ? 100 - x.remain*28 : 100;
+    return `<div class="task">
+      <div class="top"><span class="id">${x.id}</span>
+        <span>${x.manual ? '<span class="tag gray" style="margin-right:5px">手动</span>' : ''}${levelTag(c,label)}</span></div>
+      <div class="who">${x.groupName}</div>
+      <div class="where">${x.line} ${span} · ${x.manual ? '手动指定' : '派单时' + x.level}</div>
+      <div class="foot"><div class="bar" style="flex:1"><i style="width:${prog}%"></i></div><span>${prog}%</span></div>
+    </div>`;
+  }).join('') || `<div class="muted">暂无任务，等待自动派单</div>`;
+
+  const done = S.tasks.filter(x=>x.status==='done').length;
+  const cancel = S.tasks.filter(x=>x.status==='cancel').length;
+  $('tabBody').innerHTML = `
+    <div class="panel-h" style="padding:0 0 12px;border-bottom:0">
+      <h2>任务列表</h2><span class="sub">进行中 ${S.tasks.filter(x=>x.status==='enroute'||x.status==='onsite').length} · 已完成 ${done} · 已撤单 ${cancel}</span>
+    </div>
+    <div class="taskGrid">${cards}</div>
+    <div class="note">任务流转：派单 → 前往（按距离 1~6 个时段）→ 现场处置（3 个时段）→ 完成撤离。任务号按日期+序号生成，可追溯到警组与断面。</div>
+  `;
+}
+
+function renderDevice(){
+  const counts = {stuck:0, zero:0, spike:0, bias:0};
+  S.alarms.forEach(a=>counts[a.key]++);
+  const owned = S.stations.filter(s=>s.managed).length;
+  const cells = S.stations.map(s=>{
+    const cls = !s.managed ? 'off' : (s.detected ? 'fault' : (s.health<100 ? 'warn2' : ''));
+    return `<div class="dev ${cls}" title="${s.sid}｜${s.managed?'健康度 '+s.health+'｜'+(s.fault||'正常'):'非辖区'}">${s.sid.replace('S','')}</div>`;
+  }).join('');
+  const list = S.alarms.map(a=>`<tr><td><b>${a.sid}</b></td><td>${a.line}</td><td>${a.fault}</td><td>${a.health}</td>
+     <td><span class="tag bad">待检修</span></td></tr>`).join('')
+     || `<tr><td colspan="5" class="muted">辖区设备全部正常</td></tr>`;
+
+  $('tabBody').innerHTML = `
+    <div class="panel-h" style="padding:0 0 10px;border-bottom:0">
+      <h2>设备健康总览</h2>
+      <span class="sub">辖区 ${owned} 个断面 · 异常 ${S.alarms.length} · 冻结 ${counts.stuck} · 掉零 ${counts.zero} · 尖峰 ${counts.spike} · 漂移 ${counts.bias}</span>
+    </div>
+    <div class="devGrid">${cells}</div>
+    <div class="panel-h" style="padding:16px 0 6px;border-bottom:0"><h2>异常清单</h2><span class="sub">按三参数一致性判定</span></div>
+    <table><thead><tr><th>断面</th><th>干线</th><th>异常类型</th><th>健康度</th><th>处置</th></tr></thead><tbody>${list}</tbody></table>
+    <div class="note">判定依据：速度掉零但仍有流量、连续 4 个时段数值不变（冻结）、速度超过基线 1.7 倍（尖峰）、占有率偏离基线超过 22 个百分点（漂移）。异常断面会同步标记在路网图上，派警时优先人工复核。</div>
+  `;
+}
+
+function renderFeed(){
+  $('feed').innerHTML = S.events.map(e=>`<div class="ev ${e.kind}"><div class="t">${e.t}</div><div class="x">${e.text}</div></div>`).join('')
+    || `<div class="ev"><div class="t">--</div><div class="x muted">暂无事件</div></div>`;
+}
+
+/* ---------- 视图切换与推进 ---------- */
+function stopTimer(){ if (timer) clearInterval(timer); timer = null; timerOn = false; }
+
+function syncTimer(){
+  if (!S || replayMode || S.status === 'done'){ stopTimer(); return; }
+  if (S.playing && !timerOn){
+    timer = setInterval(async ()=>{
+      if (!S || !S.playing || replayMode) return;
+      const d = await fetch(`/api/tasks/${S.taskId}/tick?token=${S.token}`, {method:'POST'}).then(r=>r.json());
+      S = d;
+      render();
+      if (S.status === 'done'){ replayMode = true; stopTimer(); renderReplay(); }
+    }, 2000);
+    timerOn = true;
+  } else if (!S.playing) stopTimer();
+}
+
+function showDash(){
+  $('workView').classList.add('hide');
+  $('dashView').classList.remove('hide');
+  // 监测页不属于工作台的三个分类，取消左侧导航的选中态，避免看起来"还在历史任务里"
+  document.querySelectorAll('[data-nav]').forEach(x=>x.classList.remove('on'));
+  window.scrollTo(0, 0);
+}
+
+async function showWork(){
+  if (document.body.classList.contains('focusMode')) exitFocus();
+  stopTimer();
+  $('dashView').classList.add('hide');
+  $('workView').classList.remove('hide');
+  document.querySelectorAll('[data-nav]').forEach(x=>x.classList.toggle('on', x.dataset.nav === filter));
+  await loadTasks();
+  window.scrollTo(0, 0);
+}
+
+/* ---------- 任务工作台 ---------- */
+async function loadTasks(){
+  const d = await fetch('/api/tasks').then(r=>r.json());
+  TASKS = d.tasks || [];
+  $('statRunning').textContent = d.running;
+  $('statDone').textContent = d.done;
+  $('statAll').textContent = TASKS.length;
+  $('navRunning').textContent = d.running;
+  $('navDone').textContent = d.done;
+  renderWork();
+}
+
+function renderWork(){
+  const list = TASKS
+    .filter(t => filter === 'all' || t.status === filter)
+    .filter(t => !q || (t.name + t.id).toLowerCase().includes(q));
+  $('taskRows').innerHTML = list.map(t=>{
+    const pct = Math.round(t.tick / t.totalTicks * 100);
+    const running = t.status === 'running';
+    return `<tr>
+      <td><div class="tName">${esc(t.name)}</div><div class="tSub">${t.id} · 创建于 ${t.createdAt}</div></td>
+      <td>${t.lines.length > 1 ? '全线' : t.lines[0]}</td>
+      <td>${t.groupCount} 组</td>
+      <td><div class="prog"><div class="bar"><i style="width:${pct}%;background:${running ? '#38bdf8' : '#22c55e'}"></i></div><span>${t.tick}/${t.totalTicks}</span></div></td>
+      <td>${running ? '<span class="tag warn">运行中</span>' : '<span class="tag ok">已归档</span>'}
+          <div class="tSub">${t.day > 1 ? '第' + t.day + '天 ' : ''}${t.clock} · 拥堵 ${(t.kpi && t.kpi.congested) || 0}</div></td>
+      <td style="text-align:right">
+        <button class="rowBtn ${running ? 'primary' : ''}" onclick="enterTask('${t.id}')">${running ? '进入监测' : '回看'}</button>
+        <button class="rowDel" onclick="delTask('${t.id}')" title="删除任务">删除</button>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6"><div class="empty">还没有任务。<br>点右上角“新建任务”，选好辖区和警力就能开始。</div></td></tr>`;
+}
+
+async function enterTask(id){
+  const d = await fetch(`/api/tasks/${id}`).then(r=>r.json());
+  if (!d.snap) return;
+  currentTask = d.task;
+  S = d.snap;
+  replayMode = !!d.replay;
+  mapView = {x:0, y:0, w:MAP_W, h:MAP_H};
+  selIdx = null;
+  selGroup = null; assignMode = false;
+  showDash();
+  render();
+  renderReplay();
+  syncTimer();
+}
+
+async function delTask(id){
+  const t = TASKS.find(x => x.id === id);
+  if (!confirm(`删除任务「${t ? t.name : id}」？历史回看数据会一起删除。`)) return;
+  await fetch(`/api/tasks/${id}`, {method:'DELETE'});
+  loadTasks();
+}
+
+/* ---------- 回看进度条 ---------- */
+function renderReplay(){
+  const bar = $('replayBar');
+  const controls = document.querySelector('#dashView .controls');
+  if (!S){ bar.classList.add('hide'); return; }
+  if (!replayMode){
+    bar.classList.add('hide');
+    controls.classList.remove('hide');
+    return;
+  }
+  bar.classList.remove('hide');
+  controls.classList.add('hide');
+  $('rbRange').max = S.totalTicks;
+  $('rbRange').value = S.tick;
+  $('rbClock').textContent = `第 ${S.day} 天 ${S.clock}`;
+  $('rbPos').textContent = `${S.tick} / ${S.totalTicks}`;
+  $('rbHint').textContent = S.tick >= S.totalTicks ? '已到终点，可往回拖' : '拖动查看当时状态';
+}
+
+async function gotoReplay(i){
+  if (!S || !S.taskId) return;
+  const my = ++rbSeq;
+  const d = await fetch(`/api/tasks/${S.taskId}/replay/${i}`).then(r=>r.json());
+  if (my !== rbSeq || !d.clock) return;
+  S = d;
+  render();
+  renderReplay();
+}
+
+$('rbRange').oninput = e => gotoReplay(+e.target.value);
+$('rbPrev').onclick = () => { if (S) gotoReplay(Math.max(0, S.tick - 1)); };
+$('rbNext').onclick = () => { if (S) gotoReplay(Math.min(S.totalTicks, S.tick + 1)); };
+
+/* ---------- 地图全屏 ---------- */
+function toggleFocus(){
+  if (document.body.classList.contains('focusMode')){ exitFocus(); return; }
+  document.body.classList.add('focusMode');
+  if (document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen().catch(()=>{});
+  }
+  render();
+}
+
+function exitFocus(){
+  document.body.classList.remove('focusMode');
+  if (document.fullscreenElement && document.exitFullscreen){
+    document.exitFullscreen().catch(()=>{});
+  }
+  render();
+}
+
+document.addEventListener('fullscreenchange', ()=>{
+  if (!document.fullscreenElement && document.body.classList.contains('focusMode')){
+    document.body.classList.remove('focusMode');
+    render();
+  }
+});
+document.addEventListener('keydown', e=>{
+  if (e.key === 'Escape' && assignMode){
+    assignMode = false;
+    render();
+    return;
+  }
+  if (e.key === 'Escape' && document.body.classList.contains('focusMode') && !document.fullscreenElement){
+    exitFocus();
+  }
+});
+
+/* ---------- 监测页操作 ---------- */
+document.querySelectorAll('.tab').forEach(el=>{
+  el.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    el.classList.add('on');
+    tab = el.dataset.tab;
+    render();
+  };
+});
+
+$('btnBack').onclick = showWork;
+
+$('btnPlay').onclick = async ()=>{
+  if (!S || replayMode || S.status === 'done') return;
+  const d = await fetch(`/api/tasks/${S.taskId}/play`, {method:'POST'}).then(r=>r.json());
+  S.playing = d.playing;
+  $('btnPlay').textContent = S.playing ? '暂停' : '继续';
+  syncTimer();
+};
+
+$('btnStep').onclick = async ()=>{
+  if (!S || replayMode || S.status === 'done') return;
+  const d = await fetch(`/api/tasks/${S.taskId}/tick?token=${S.token}`, {method:'POST'}).then(r=>r.json());
+  S = d; render();
+  if (S.status === 'done'){ replayMode = true; stopTimer(); renderReplay(); }
+};
+
+$('btnReset').onclick = async ()=>{
+  if (!S || !S.taskId) return;
+  if (!confirm('重置会清空这个任务已记录的历史，回到早上 6 点。确定吗？')) return;
+  stopTimer();
+  const d = await fetch(`/api/tasks/${S.taskId}/reset`, {method:'POST'}).then(r=>r.json());
+  S = d;
+  replayMode = false;
+  mapView = {x:0, y:0, w:MAP_W, h:MAP_H};
+  selIdx = null;
+  selGroup = null; assignMode = false;
+  render(); renderReplay(); syncTimer();
+};
+
+/* ---------- 新建任务 ---------- */
+function openSetup(){
+  $('inpName').value = '';
+  $('ckLine1').checked = true;
+  $('ckLine2').checked = true;
+  $('inpGroups').value = 20;
+  $('setupMask').classList.add('on');
+  setTimeout(()=> $('inpName').focus(), 60);
+}
+function closeSetup(){ $('setupMask').classList.remove('on'); }
+
+async function startSetup(){
+  const lines = [];
+  if ($('ckLine1').checked) lines.push('干线一');
+  if ($('ckLine2').checked) lines.push('干线二');
+  if (!lines.length){ alert('请至少选择一条管辖道路'); return; }
+  let n = parseInt($('inpGroups').value, 10);
+  if (!n || n < 4) n = 4;
+  if (n > 40) n = 40;
+  stopTimer();
+  const r = await fetch('/api/tasks', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: $('inpName').value.trim(), lines, groups: n})
+  });
+  const d = await r.json();
+  closeSetup();
+  currentTask = d.task;
+  S = d.snap;
+  replayMode = false;
+  mapView = {x:0, y:0, w:MAP_W, h:MAP_H};
+  selIdx = null;
+  selGroup = null; assignMode = false;
+  showDash();
+  render();
+  renderReplay();
+  syncTimer();
+}
+
+$('btnNew').onclick = openSetup;
+$('btnRefresh').onclick = loadTasks;
+$('btnSetupCancel').onclick = closeSetup;
+$('btnSetupStart').onclick = startSetup;
+$('setupMask').addEventListener('click', e => { if (e.target.id === 'setupMask') closeSetup(); });
+document.querySelectorAll('[data-preset]').forEach(b => {
+  b.onclick = () => {
+    const p = b.dataset.preset;
+    $('ckLine1').checked = p !== 'l2';
+    $('ckLine2').checked = p !== 'l1';
+    $('inpGroups').value = p === 'l2' ? 8 : (p === 'l1' ? 16 : 20);
+  };
+});
+
+/* ---------- 工作台筛选 / 导航 ---------- */
+function setFilter(v){
+  filter = v;
+  document.querySelectorAll('.wtab').forEach(x=>x.classList.toggle('on', x.dataset.filter === v));
+  document.querySelectorAll('[data-nav]').forEach(x=>x.classList.toggle('on', x.dataset.nav === v));
+  renderWork();
+}
+document.querySelectorAll('.wtab').forEach(b => { b.onclick = () => setFilter(b.dataset.filter); });
+document.querySelectorAll('[data-nav]').forEach(a => {
+  a.onclick = async () => {
+    if (a.dataset.nav === 'new'){ openSetup(); return; }
+    // 先切筛选，再回到工作台视图；在监测页点导航也能直接跳回对应列表
+    setFilter(a.dataset.nav);
+    await showWork();
+  };
+});
+$('taskSearch').oninput = e => { q = e.target.value.trim().toLowerCase(); renderWork(); };
+
+loadTasks();
+</script>
+</body>
+</html>

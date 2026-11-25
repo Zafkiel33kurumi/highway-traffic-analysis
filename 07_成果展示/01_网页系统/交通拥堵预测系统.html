@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高速公路拥堵预测 · 整体规律模型</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
+    --brand:#0f766e; --brand-soft:#ccfbf1;
+    --ok:#059669; --warn:#d97706; --bad:#dc2626;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.06);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+  h1{font-size:24px;letter-spacing:-.02em;font-weight:700}
+  h1 span{color:var(--brand)}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft);color:var(--brand);
+        font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px}
+  .pill i{width:6px;height:6px;border-radius:50%;background:var(--brand);display:inline-block}
+
+  .layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+  .card-head h2{font-size:14px;font-weight:700;letter-spacing:.01em}
+  .card-body{padding:18px 20px}
+
+  .field{margin-bottom:18px}
+  .field:last-child{margin-bottom:0}
+  .label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px}
+  .label output{font-size:18px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--brand);height:22px}
+  .seg{display:grid;grid-auto-flow:column;gap:6px}
+  .seg.w3{grid-template-columns:repeat(3,1fr);grid-auto-flow:row}
+  .seg button{
+    border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 0;font-size:13px;
+    font-weight:600;color:#374151;cursor:pointer;transition:.15s;font-family:inherit
+  }
+  .seg button:hover{border-color:#cbd5e1}
+  .seg button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  .seg.small button{padding:7px 0;font-size:12px}
+  .hint{font-size:11px;color:#9ca3af;margin-top:6px;line-height:1.55}
+
+  .result-top{display:grid;grid-template-columns:210px 1fr;gap:24px;align-items:center;padding:22px 22px 18px}
+  @media(max-width:640px){.result-top{grid-template-columns:1fr}}
+  .gauge{position:relative;width:190px;height:190px;margin:0 auto}
+  .gauge .ring{width:100%;height:100%;border-radius:50%;
+    background:conic-gradient(var(--g) calc(var(--p)*1%), #eef1f4 0);
+    display:grid;place-items:center;transition:background .5s}
+  .gauge .inner{width:150px;height:150px;border-radius:50%;background:#fff;display:grid;place-items:center;text-align:center;
+    box-shadow:inset 0 0 0 1px var(--line)}
+  .gauge .num{font-size:40px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+  .gauge .num small{font-size:16px;font-weight:700;margin-left:2px;color:var(--muted)}
+  .gauge .cap{font-size:11px;color:var(--muted);margin-top:6px}
+  .verdict h3{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+  .verdict p{color:var(--muted);font-size:13px}
+  .badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;margin-bottom:10px}
+
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:0 22px 22px}
+  @media(max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)}}
+  .metric{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fcfcfd}
+  .metric .k{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+  .metric .v{font-size:24px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-top:2px}
+  .metric .v em{font-size:12px;font-style:normal;font-weight:600;color:var(--muted);margin-left:3px}
+  .metric .r{font-size:11px;color:#9ca3af;margin-top:4px;font-variant-numeric:tabular-nums}
+
+  .chart{padding:6px 20px 16px;position:relative}
+  .chart svg{width:100%;height:170px;display:block;overflow:visible;cursor:crosshair}
+  .chart .axis{font-size:10px;fill:#9ca3af}
+  .tip{position:absolute;z-index:5;min-width:140px;background:rgba(17,24,39,.94);color:#f9fafb;
+       border-radius:10px;padding:9px 11px;font-size:11.5px;line-height:1.5;pointer-events:none;
+       opacity:0;transition:opacity .12s;box-shadow:0 8px 24px rgba(16,24,40,.22);white-space:nowrap}
+  .tip.on{opacity:1}
+  .tip .t{font-size:12.5px;font-weight:700;margin-bottom:5px}
+  .tip .r{display:flex;justify-content:space-between;gap:16px;color:#d1d5db}
+  .tip .r b{color:#fff;font-variant-numeric:tabular-nums}
+  .tip .w{color:#fca5a5;font-size:11px;margin-top:3px}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--muted);padding:0 20px 16px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+
+  .advice-grid{display:grid;grid-template-columns:1fr 1fr}
+  @media(max-width:760px){.advice-grid{grid-template-columns:1fr}}
+  .advice-col{padding:18px 22px}
+  .advice-col+.advice-col{border-left:1px solid var(--line)}
+  @media(max-width:760px){.advice-col+.advice-col{border-left:0;border-top:1px solid var(--line)}}
+  .advice-col h3{font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .advice-col h3 .dot{width:8px;height:8px;border-radius:50%}
+  .advice-col ul{list-style:none}
+  .advice-col li{position:relative;padding-left:18px;font-size:13px;color:#374151;margin-bottom:8px}
+  .advice-col li::before{content:'';position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:50%;background:#d1d5db}
+
+  /* 对比面板 */
+  .compare{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0}
+  @media(max-width:900px){.compare{grid-template-columns:1fr}}
+  .cmp{padding:18px 20px}
+  .cmp+.cmp{border-left:1px solid var(--line)}
+  @media(max-width:900px){.cmp+.cmp{border-left:0;border-top:1px solid var(--line)}}
+  .cmp h3{font-size:12.5px;font-weight:700;margin-bottom:12px;color:#374151}
+  .cmp .row{display:grid;grid-template-columns:64px 1fr 52px;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
+  .cmp .row .lb{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmp .row .track{height:8px;border-radius:4px;background:#eef1f4;overflow:hidden}
+  .cmp .row .track i{display:block;height:100%;border-radius:4px;background:#cbd5e1;transition:width .3s}
+  .cmp .row.on .lb{color:var(--ink);font-weight:700}
+  .cmp .row.on .track i{background:var(--brand)}
+  .cmp .row .val{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:#374151}
+  .cmp .note{font-size:11px;color:#9ca3af;margin-top:10px;line-height:1.6}
+
+  .foot{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:20px;margin-top:20px}
+  @media(max-width:900px){.foot{grid-template-columns:1fr}}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .kv:last-child{border-bottom:0}
+  .kv b{font-variant-numeric:tabular-nums;text-align:right}
+  .bar{height:7px;border-radius:4px;background:#eef1f4;overflow:hidden;margin-top:6px}
+  .bar i{display:block;height:100%;background:var(--brand);border-radius:4px}
+  .imp{margin-bottom:12px}
+  .imp .top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px}
+  .note{font-size:11.5px;color:#9ca3af;line-height:1.75}
+  .note b{color:#6b7280}
+  a{color:var(--brand);text-decoration:none}
+  .src{font-size:11.5px;color:var(--muted);line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>高速公路拥堵预测<span> · 整体规律模型</span></h1>
+      <div class="sub">输入时段、天气、日期类型、车道数，输出拥堵概率与出行建议</div>
+    </div>
+    <span class="pill"><i></i><span id="srcPill">逐小时断面检测数据</span></span>
+  </header>
+
+  <div class="layout">
+    <!-- 输入 -->
+    <section class="card">
+      <div class="card-head"><h2>输入条件</h2><span class="hint" id="sampleHint"></span></div>
+      <div class="card-body">
+        <div class="field">
+          <div class="label">时段 <output id="hourOut">17:00</output></div>
+          <input type="range" id="hour" min="0" max="23" step="1" value="17">
+          <div class="hint">拖动查看全天变化</div>
+        </div>
+
+        <div class="field">
+          <div class="label">天气</div>
+          <div class="seg w3" id="weather"></div>
+          <div class="hint">按降水强度分级：小雨 &lt;1.5 mm/h，大雨 ≥1.5；小雪 &lt;0.5 cm/h，大雪 ≥0.5</div>
+        </div>
+
+        <div class="field">
+          <div class="label">日期类型</div>
+          <div class="seg w3" id="dayType"></div>
+        </div>
+
+        <div class="field">
+          <div class="label">车道数</div>
+          <div class="seg" id="lanes"></div>
+          <div class="hint" id="laneHint"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 结果 -->
+    <section class="card">
+      <div class="result-top">
+        <div class="gauge">
+          <div class="ring" id="ring">
+            <div class="inner">
+              <div>
+                <div class="num" id="prob">--<small>%</small></div>
+                <div class="cap">拥堵概率</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <span class="badge" id="badge">拥堵概率 --</span>
+          <h3 id="level">--</h3>
+          <p id="levelDesc">--</p>
+          <p class="hint" id="dataWarn" style="margin-top:8px"></p>
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="k">断面总流量</div>
+          <div class="v" id="flow">--<em>辆/h</em></div>
+          <div class="r" id="flowNote"></div>
+        </div>
+        <div class="metric">
+          <div class="k">每车道负荷</div>
+          <div class="v" id="load">--<em>辆/h</em></div>
+          <div class="r" id="loadNote"></div>
+        </div>
+        <div class="metric">
+          <div class="k">平均车速</div>
+          <div class="v" id="speed">--<em>km/h</em></div>
+          <div class="r" id="speedNote"></div>
+        </div>
+        <div class="metric">
+          <div class="k">车道占有率</div>
+          <div class="v" id="occ">--<em>%</em></div>
+          <div class="r" id="occNote"></div>
+        </div>
+      </div>
+
+      <div class="chart">
+        <svg id="curve" viewBox="0 0 720 170" preserveAspectRatio="none"></svg>
+        <div class="tip" id="tip"></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:#0f766e"></i>当前条件下的全天拥堵概率</span>
+        <span><i style="background:#dc2626"></i>当前时段</span>
+        <span><i style="background:#cbd5e1"></i>50% 参考线</span>
+        <span style="margin-left:auto;color:#9ca3af">鼠标移到曲线上可查看该时段的具体数值</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- 条件对比 -->
+  <section class="card" style="margin-top:20px">
+    <div class="card-head">
+      <h2>同样条件下，谁在影响概率</h2>
+      <span class="hint">其他条件保持不变，只改一个输入</span>
+    </div>
+    <div class="compare">
+      <div class="cmp">
+        <h3>换天气（同一时段 / 日期类型）</h3>
+        <div id="cmpWeather"></div>
+        <div class="note" id="cmpWeatherNote"></div>
+      </div>
+      <div class="cmp">
+        <h3>换日期类型（同一时段 / 天气）</h3>
+        <div id="cmpDay"></div>
+        <div class="note" id="cmpDayNote"></div>
+      </div>
+      <div class="cmp">
+        <h3>换车道数（同一时段 / 天气 / 日期类型）</h3>
+        <div id="cmpLanes"></div>
+        <div class="note" id="cmpLanesNote"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 建议 -->
+  <section class="card" style="margin-top:20px">
+    <div class="card-head"><h2>处置建议</h2><span class="hint">按概率等级、天气强度、负荷率自动生成</span></div>
+    <div class="advice-grid">
+      <div class="advice-col">
+        <h3><span class="dot" style="background:#0f766e"></span>驾驶员出行建议</h3>
+        <ul id="adviceDriver"></ul>
+      </div>
+      <div class="advice-col">
+        <h3><span class="dot" style="background:#b45309"></span>交管部门管控建议</h3>
+        <ul id="adviceAuthority"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 导入数据 -->
+  <section class="card" style="margin-top:20px">
+    <div class="card-head"><h2>导入数据 · 重新训练</h2><span class="hint" id="impState">未导入</span></div>
+    <div class="card-body">
+      <div class="src">选择一份 CSV，服务会用这份数据重新训练模型，然后替换页面上的全部数字。
+        必需列：timestamp / station_id / flow_veh_hour / avg_speed_kmh / occupancy_pct / lane_count / weather。</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <input type="file" id="impFile" accept=".csv">
+        <button id="impBtn" style="border:1px solid var(--brand);background:var(--brand);color:#fff;
+                border-radius:10px;padding:8px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          开始训练
+        </button>
+        <span class="src" id="impMsg"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 数据与模型 -->
+  <div class="foot">
+    <section class="card">
+      <div class="card-head"><h2>数据说明</h2></div>
+      <div class="card-body">
+        <div class="src">
+          交通：高速公路主线断面检测器逐小时数据<br>
+          天气：同期逐小时气象观测记录
+        </div>
+        <div class="kv" style="margin-top:12px"><span>拥堵定义</span><b id="mDef">--</b></div>
+        <div class="kv"><span>各天气均速</span><b id="mWeather">--</b></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>模型精度</h2></div>
+      <div class="card-body">
+        <div class="kv"><span>每车道流量 R²</span><b id="mFlow">--</b></div>
+        <div class="kv"><span>车速 R²</span><b id="mSpeed">--</b></div>
+        <div class="kv"><span>占有率 R²</span><b id="mOcc">--</b></div>
+        <div class="kv"><span>拥堵概率 AUC</span><b id="mAuc">--</b></div>
+        <div class="kv"><span>Brier / 基准拥堵率</span><b id="mBrier">--</b></div>
+        <div class="note" style="margin-top:10px">
+          概率来自分类器 + 等温校准：工作日 7 点预测 22.2%、实测 20.6%；17 点预测 41.0%、实测 42.3%；周末 8 点预测 1.6%、实测 1.9%。
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>各输入的影响幅度</h2></div>
+      <div class="card-body" id="effects"></div>
+      <div class="card-body" style="padding-top:0">
+        <div class="note" style="margin-bottom:10px">
+          单位：百分点。固定其余条件、只改这一个输入，拥堵概率平均变动多少。
+          看"平均"更有意义——"最大"经常出现在没有实测样本、纯外推的格子里。
+        </div>
+        <div class="note">
+          <b>模型怎么用输入：</b>时段、天气、日期类型、车道数全部作为随机森林的输入特征，
+          模型自己学每个取值的效应，前端只做查表，不做任何倍数修正。
+        </div>
+        <div class="note" style="margin-top:10px">
+          <b>已知局限：</b>4 车道、5 车道、大雪这三档样本偏少，结论代表性弱；
+          1728 个输入组合里有 431 个没有实测样本、另有 265 个不足 100 条。
+          同一车道档内部差异很大，车道数只是"这一段是不是瓶颈"的粗代理，不能当因果结论。
+          页面在样本不足或无样本时会自动提示"外推"。
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="prediction_data.js"></script>
+<script>
+const D = window.TRAFFIC;
+const M = D.meta;
+const WLABEL = {Clear:'晴', Cloudy:'多云', LightRain:'小雨', HeavyRain:'大雨', LightSnow:'小雪', HeavySnow:'大雪'};
+const DLABEL = {workday:'工作日', weekend:'周末', holiday:'节假日'};
+
+const state = {hour:17, wx:'Clear', day:'workday', lanes:3};
+
+const $ = id => document.getElementById(id);
+
+// 页面只读取模型算好的结果，不做任何固定的乘法修正。
+const key = (h = state.hour, w = state.wx, d = state.day, l = state.lanes) =>
+  `${h}|${w}|${d}|${l}`;
+const row = (h = state.hour) => D.grid[key(h, state.wx, state.day)] || [0,0,0,0,0,0];
+
+/* ---------- 控件 ---------- */
+function buildControls(){
+  $('weather').innerHTML = M.weathers.map(w =>
+    `<button data-w="${w}" class="${w===state.wx?'on':''}">${WLABEL[w]||w}</button>`).join('');
+  $('dayType').innerHTML = M.dayTypes.map(d =>
+    `<button data-d="${d}" class="${d===state.day?'on':''}">${DLABEL[d]||d}</button>`).join('');
+  $('lanes').innerHTML = M.lanes.map(l =>
+    `<button data-l="${l}" class="${l===state.lanes?'on':''}">${l} 车道</button>`).join('');
+
+  $('weather').onclick = e => { const b = e.target.closest('button'); if(!b) return;
+    state.wx = b.dataset.w; buildControls(); render(); };
+  $('dayType').onclick = e => { const b = e.target.closest('button'); if(!b) return;
+    state.day = b.dataset.d; buildControls(); render(); };
+  $('lanes').onclick = e => { const b = e.target.closest('button'); if(!b) return;
+    state.lanes = +b.dataset.l; buildControls(); render(); };
+  $('hour').oninput = e => { state.hour = +e.target.value; render(); };
+}
+
+/* ---------- 等级 ---------- */
+function levelOf(p){
+  if (p < 10) return {t:'畅通', c:'#059669', bg:'#d1fae5', d:'车流稳定，基本无排队，按限速正常通行。'};
+  if (p < 25) return {t:'基本畅通', c:'#0f766e', bg:'#ccfbf1', d:'局部缓行，整体通行正常，注意保持车距。'};
+  if (p < 45) return {t:'轻度拥堵', c:'#d97706', bg:'#fef3c7', d:'可能出现排队，预计延误 5~15 分钟，建议提前出发。'};
+  if (p < 65) return {t:'中度拥堵', c:'#ea580c', bg:'#ffedd5', d:'多路段明显排队，预计延误 15~40 分钟，建议错峰或绕行。'};
+  return {t:'严重拥堵', c:'#dc2626', bg:'#fee2e2', d:'大范围拥堵，预计延误 40 分钟以上，建议改走地面道路。'};
+}
+
+/* ---------- 建议 ---------- */
+function advice(p, speed, sat, lv){
+  const w = state.wx, h = state.hour, d = state.day;
+  const peak = (h>=7 && h<=9) || (h>=15 && h<=18);
+  const wet = (w==='LightRain'||w==='HeavyRain');
+  const snow = (w==='LightSnow'||w==='HeavySnow');
+  const heavy = (w==='HeavyRain'||w==='HeavySnow');
+  const drv = [], auth = [];
+
+  if (p >= 65){
+    drv.push('强烈建议改乘公交/轨道，或推迟 1 小时以上出发。');
+    drv.push('如已在高速上，就近驶离主线，改走平行地面道路。');
+    auth.push('启动一级疏导预案：主线两端设分流点，必要时开放应急车道。');
+    auth.push('清障车在拥堵段两端待命，快速处置占道车辆。');
+  } else if (p >= 45){
+    drv.push('建议错峰出行，或预留 20~40 分钟额外时间。');
+    auth.push('启动疏导预案：增派警力到匝道与瓶颈点。');
+    auth.push('实施匝道控流，通过 VMS 与导航平台发布绕行信息。');
+  } else if (p >= 25){
+    drv.push('预计出现短时排队，建议提前 10~20 分钟出发。');
+    auth.push('加强关键节点巡逻，提前发布拥堵预警。');
+  } else {
+    drv.push('路况良好，按限速正常通行即可。');
+    auth.push('保持常规监控，可利用低峰安排养护作业。');
+  }
+
+  if (heavy){
+    drv.push(snow ? '大雪：路面结冰打滑，速度降到限速 60% 以下，车距加倍。'
+                  : '大雨：能见度与附着力下降，降速并开启近光灯、雾灯。');
+    auth.push(`${WLABEL[w]}：启用可变限速，必要时限制重车与危化品车上路。`);
+  } else if (wet || snow){
+    drv.push('路面湿滑，适当降速，加长车距，避免急刹。');
+    auth.push('发布降雨（雪）提示，重点路段加密巡查。');
+  }
+
+  if (peak) {
+    drv.push(`当前处于${h<12?'早':'晚'}高峰，尽量避开 7-9 点 / 15-18 点。`);
+    auth.push('高峰时段优化信号配时，优先保障主线通行。');
+  }
+  if (d === 'weekend') drv.push('周末高峰更平缓，中午到下午车流集中，建议避开 12-16 点。');
+  if (d === 'holiday') drv.push('节假日总量不低但峰值分散，出发前看一眼实时路况即可。');
+  if (sat >= 80) auth.push(`每车道负荷已达常态高峰负荷的 ${sat.toFixed(0)}%，属饱和运行，应启动需求管理。`);
+  if (speed < 50) auth.push('平均车速偏低，排查是否有事故、施工或抛撒物占道。');
+  if (lv.t === '畅通' && !peak && w === 'Clear') auth.push('可安排在此时段进行道路养护与设施检查。');
+
+  const clean = arr => arr.filter(t => t).slice(0, 4);
+  return {drv: clean(drv), auth: clean(auth)};
+}
+
+/* ---------- 24 小时曲线 ---------- */
+function drawCurve(){
+  const W = 720, H = 170, PL = 34, PR = 12, PT = 12, PB = 26;
+  const values = Array.from({length:24}, (_,h) => row(h)[3]);
+  const x = h => PL + (W-PL-PR) * h/23;
+  const y = v => PT + (H-PT-PB) * (1 - v/100);
+  const pts = values.map((v,h) => `${x(h).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `${PL},${y(0)} ${pts} ${x(23)},${y(0)}`;
+  const cur = values[state.hour];
+  let ticks = '';
+  for (let h=0; h<24; h+=3)
+    ticks += `<text class="axis" x="${x(h)}" y="${H-8}" text-anchor="middle">${h}:00</text>`;
+  let lines = '';
+  [0,50,100].forEach(v => lines +=
+    `<line x1="${PL}" x2="${W-PR}" y1="${y(v)}" y2="${y(v)}" stroke="#eef1f4" stroke-width="1"/>
+     <text class="axis" x="${PL-6}" y="${y(v)+3}" text-anchor="end">${v}%</text>`);
+
+  $('curve').innerHTML = `
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f766e" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#0f766e" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${lines}
+    <polygon points="${area}" fill="url(#g)"/>
+    <polyline points="${pts}" fill="none" stroke="#0f766e" stroke-width="2.2" stroke-linejoin="round"/>
+    <line x1="${x(state.hour)}" x2="${x(state.hour)}" y1="${PT}" y2="${H-PB}" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <circle cx="${x(state.hour)}" cy="${y(cur)}" r="5" fill="#fff" stroke="#dc2626" stroke-width="2.5"/>
+    ${ticks}
+    <g id="hvG" opacity="0">
+      <line id="hvLine" y1="${PT}" y2="${H-PB}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>
+      <circle id="hvDot" r="4.5" fill="#fff" stroke="#0f766e" stroke-width="2"/>
+    </g>`;
+
+  bindHover(W, PL, PR, x, y);
+}
+
+/* ---------- 鼠标跟随：显示指到那一小时的数据 ---------- */
+function bindHover(W, PL, PR, x, y){
+  const svg = $('curve'), tip = $('tip');
+  const hg = $('hvG'), hl = $('hvLine'), hd = $('hvDot');
+
+  function hourAt(e){
+    const r = svg.getBoundingClientRect();
+    const vx = (e.clientX - r.left) / r.width * W;
+    return Math.max(0, Math.min(23, Math.round((vx - PL) / ((W - PL - PR) / 23))));
+  }
+
+  function move(e){
+    const h = hourAt(e);
+    const [fpl, speed, occ, p, sLo, sHi] = row(h);
+    const c = M.counts[key(h, state.wx, state.day, state.lanes)] || 0;
+    const lv = levelOf(p);
+
+    hg.setAttribute('opacity', '1');
+    hl.setAttribute('x1', x(h)); hl.setAttribute('x2', x(h));
+    hd.setAttribute('cx', x(h)); hd.setAttribute('cy', y(p));
+
+    tip.innerHTML =
+      `<div class="t">${String(h).padStart(2,'0')}:00 · ${lv.t}</div>
+       <div class="r"><span>拥堵概率</span><b>${p.toFixed(1)}%</b></div>
+       <div class="r"><span>平均车速</span><b>${speed.toFixed(1)} km/h</b></div>
+       <div class="r"><span>每车道流量</span><b>${Math.round(fpl)} 辆/h</b></div>
+       <div class="r"><span>占有率</span><b>${occ.toFixed(1)}%</b></div>
+       <div class="r"><span>实测样本</span><b>${c ? c.toLocaleString() + ' 条' : '无'}</b></div>
+       ${c ? '' : '<div class="w">⚠ 该时段无实测样本，为外推值</div>'}`;
+    tip.classList.add('on');
+
+    const box = svg.parentElement.getBoundingClientRect();
+    const left = e.clientX - box.left;
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(box.width - tw, left - tw / 2)) + 'px';
+    tip.style.top = Math.max(0, e.clientY - box.top - tip.offsetHeight - 12) + 'px';
+  }
+
+  function leave(){
+    hg.setAttribute('opacity', '0');
+    tip.classList.remove('on');
+  }
+
+  svg.onpointermove = move;
+  svg.onpointerleave = leave;
+}
+
+/* ---------- 对比面板 ---------- */
+function bars(items, unit = '%'){
+  const max = Math.max(1, ...items.map(i => i.value));
+  return items.map(i =>
+    `<div class="row ${i.on?'on':''}">
+       <span class="lb">${i.label}</span>
+       <span class="track"><i style="width:${(i.value/max*100).toFixed(1)}%"></i></span>
+       <span class="val">${i.value.toFixed(unit==='%'?1:0)}${unit}</span>
+     </div>`).join('');
+}
+
+function drawCompare(p){
+  const h = state.hour;
+
+  const wItems = M.weathers.map(w => ({
+    label: WLABEL[w],
+    value: (D.grid[key(h, w, state.day)] || [0,0,0,0,0,0])[3],
+    on: w === state.wx,
+  }));
+  $('cmpWeather').innerHTML = bars(wItems);
+  const wc = M.weatherCong;
+  $('cmpWeatherNote').textContent =
+    `全天实测拥堵率：` + M.weathers.map(w => `${WLABEL[w]} ${wc[w]}%`).join('、') +
+    `。大雨把车速压到 ${M.weatherMeans.HeavyRain} km/h，晴天才 ${M.weatherMeans.Clear}。`;
+
+  const dItems = M.dayTypes.map(d => ({
+    label: DLABEL[d],
+    value: (D.grid[key(h, state.wx, d)] || [0,0,0,0,0,0])[3],
+    on: d === state.day,
+  }));
+  $('cmpDay').innerHTML = bars(dItems);
+  const dc = M.dayTypeCong;
+  $('cmpDayNote').textContent =
+    `全天实测拥堵率：工作日 ${dc.workday}%、周末 ${dc.weekend}%、节假日 ${dc.holiday}%。` +
+    `差别不在总量，在工作日 7 点集中爆发、周末摊到中午。`;
+
+  const lItems = M.lanes.map(l => ({
+    label: `${l} 车道`,
+    value: (D.grid[key(h, state.wx, state.day, l)] || [0,0,0,0,0,0])[3],
+    on: l === state.lanes,
+  }));
+  $('cmpLanes').innerHTML = bars(lItems);
+  const ls = M.laneStations;
+  $('cmpLanesNote').textContent =
+    `各档断面数：2 车道 ${ls[2]} 个、3 车道 ${ls[3]} 个、4 车道 ${ls[4]} 个、5 车道 ${ls[5]} 个。` +
+    `5 车道看起来比 4 车道堵，是因为这一档只有 1 个断面，且落在主线合流处，` +
+    `早高峰 7 点实测 78%；4 车道的 4 个断面都在外围。这是路段位置差异，不是"多一条车道更堵"。`;
+
+  $('cmpLanesNote').dataset.p = p;
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  const [fpl, speed, occ, p, sLo, sHi] = row();
+  const lv = levelOf(p);
+  const total = fpl * state.lanes;
+  const cap = M.refCap;
+  const sat = fpl / cap * 100;
+
+  $('hourOut').textContent = String(state.hour).padStart(2,'0') + ':00';
+  $('prob').innerHTML = `${p.toFixed(1)}<small>%</small>`;
+  $('ring').style.setProperty('--p', p.toFixed(1));
+  $('ring').style.setProperty('--g', lv.c);
+  $('badge').textContent = `拥堵概率 ${p.toFixed(0)}%`;
+  $('badge').style.background = lv.bg;
+  $('badge').style.color = lv.c;
+  $('level').textContent = lv.t;
+  $('level').style.color = lv.c;
+  $('levelDesc').textContent = lv.d;
+
+  $('flow').innerHTML = `${Math.round(total)}<em>辆/h</em>`;
+  $('flowNote').textContent = `${state.lanes} 车道合计`;
+  $('load').innerHTML = `${Math.round(fpl)}<em>辆/h/道</em>`;
+  $('loadNote').textContent = `负荷率 ${sat.toFixed(0)}%`;
+  $('speed').innerHTML = `${speed.toFixed(1)}<em>km/h</em>`;
+  $('speedNote').textContent = `90% 区间 ${sLo.toFixed(1)} ~ ${sHi.toFixed(1)}`;
+  $('occ').innerHTML = `${occ.toFixed(1)}<em>%</em>`;
+  $('occNote').textContent = occ > 30 ? '占有率偏高，接近饱和' : '占有率正常';
+
+  const count = M.counts[key()] || 0;
+  $('sampleHint').textContent = count ? `${count.toLocaleString()} 条实测样本` : '无实测样本';
+
+  const LANE_NOTE = {
+    2: '多在合流、分流处，主线在此收窄，高峰最堵。',
+    3: '主线常态断面，样本最多。',
+    4: '断面少，都在外围路段，几乎不堵。',
+    5: '仅一个断面，且位于主线合流处，代表性弱。',
+  };
+  $('laneHint').textContent =
+    `${state.lanes} 车道档：全数据只有 ${M.laneStations[state.lanes]} 个断面。${LANE_NOTE[state.lanes] || ''}`;
+
+  const warn = $('dataWarn');
+  if (count === 0) {
+    warn.textContent = '⚠ 该组合在本数据里没有实测样本，概率由相邻条件外推，仅供参考。';
+    warn.style.color = '#dc2626';
+  } else if (count < 100) {
+    warn.textContent = `⚠ 该组合只有 ${count} 条实测样本，估计误差较大。`;
+    warn.style.color = '#d97706';
+  } else {
+    warn.textContent = '';
+  }
+
+  const a = advice(p, speed, sat, lv);
+  $('adviceDriver').innerHTML = a.drv.map(t => `<li>${t}</li>`).join('');
+  $('adviceAuthority').innerHTML = a.auth.map(t => `<li>${t}</li>`).join('');
+
+  drawCurve();
+  drawCompare(p);
+}
+
+/* ---------- 元信息 ---------- */
+function renderMeta(){
+  $('srcPill').textContent = M.source;
+  $('mDef').textContent = `车速 < ${M.threshold} km/h`;
+  $('mWeather').textContent = M.weathers
+    .map(w => `${WLABEL[w]} ${M.weatherMeans[w]}`).join(' / ');
+  $('mFlow').textContent = M.metrics.flowR2.toFixed(3);
+  $('mSpeed').textContent = M.metrics.speedR2.toFixed(3);
+  $('mOcc').textContent = M.metrics.occR2.toFixed(3);
+  $('mAuc').textContent = M.metrics.auc.toFixed(3);
+  $('mBrier').textContent = `${M.metrics.brier.toFixed(3)} / ${(M.metrics.baseRate*100).toFixed(1)}%`;
+
+  const NAME = {hour_of_day:'时段', wx:'天气（6 级）', day_type:'日期类型', lane_count:'车道数'};
+  const eff = Object.entries(M.effects).sort((a,b) => b[1].avg - a[1].avg);
+  const max = eff[0][1].avg;
+  $('effects').innerHTML = eff.map(([k,v]) =>
+    `<div class="imp"><div class="top"><span>${NAME[k]||k}</span>
+       <b>平均 ${v.avg} · 最大 ${v.max}</b></div>
+     <div class="bar"><i style="width:${(v.avg/max*100).toFixed(1)}%"></i></div></div>`).join('');
+}
+
+buildControls();
+renderMeta();
+render();
+
+/* ---------- 导入数据 ---------- */
+$('impBtn').onclick = async () => {
+  const f = $('impFile').files[0];
+  const msg = $('impMsg'), btn = $('impBtn'), st = $('impState');
+  if (!f) { msg.textContent = '请先选择 CSV 文件'; return; }
+  if (location.protocol === 'file:') {
+    msg.textContent = '导入需要先启动服务：python3 01_网页系统/服务.py，再打开 http://localhost:8000';
+    return;
+  }
+  const fd = new FormData();
+  fd.append('file', f);
+  btn.disabled = true;
+  st.textContent = '训练中…';
+  msg.textContent = '正在用这份数据重新训练，数据量大时需要几分钟…';
+  try {
+    const r = await fetch('/api/import', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || '训练失败');
+    st.textContent = '已导入';
+    msg.textContent = `完成：${d.rows} 行 / ${d.stations} 个断面，AUC ${d.metrics.auc}，`
+      + `车速 R² ${d.metrics.speedR2}，正在刷新…`;
+    setTimeout(() => { location.href = location.pathname + '?v=' + Date.now(); }, 1500);
+  } catch (e) {
+    st.textContent = '未导入';
+    msg.textContent = '失败：' + e.message;
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>
