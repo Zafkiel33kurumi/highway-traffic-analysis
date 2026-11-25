@@ -6,8 +6,7 @@ __pycache__/
 .vscode/
 .screenshots/
 
-# 模型产物：体积大，可用训练脚本重新生成
-*.pkl
+# 模型产物：大文件用 Git LFS 管理（见 .gitattributes）
 
 # 压缩包
 *.zip

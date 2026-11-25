@@ -39,7 +39,13 @@
 - 评估：AUC 0.826，Brier 0.078，基准拥堵率 10.7%。
 - 输出：导出的 1728 种组合（24 时段 × 6 天气 × 3 日期类型 × 4 车道档），网页直接查表。
 
-模型文件 `*.pkl` 体积较大（80–135MB），未纳入仓库，可用训练脚本重新生成：
+模型文件使用 Git LFS 管理。仓库内已包含网页与演示实际使用的最终模型：
+
+```
+07_成果展示/04_模型代码/models/整体规律模型.pkl   （约 80MB，LFS）
+```
+
+其余实验阶段的模型（`modelA/B/C.pkl`、`02_代码/models/` 下的变体）体积较大，占用 LFS 免费额度，未全部上传；需要时可用训练脚本重新生成：
 
 ```bash
 cd 07_成果展示/04_模型代码
@@ -47,6 +53,19 @@ python3 整体规律模型.py
 ```
 
 默认读取 `../03_数据/清洗后数据.csv`，输出 `models/整体规律模型.pkl` 和 `../01_网页系统/prediction_data.js`。
+
+克隆仓库前先安装 Git LFS，否则模型文件只会得到一个指针文件：
+
+```bash
+git lfs install
+git clone https://github.com/Zafkiel33kurumi/highway-traffic-analysis.git
+```
+
+如果已经克隆过，补拉模型：
+
+```bash
+git lfs pull
+```
 
 ## 运行
 
